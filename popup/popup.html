@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:;" />
+  <title>WebGuard</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header class="header">
+    <div class="header-left">
+      <img src="../icons/icon48.png" alt="WebGuard" class="logo" />
+      <span class="brand">WebGuard</span>
+    </div>
+    <div class="header-right">
+      <span class="version">v1.0</span>
+    </div>
+  </header>
+
+  <!-- CURRENT SITE -->
+  <section class="site-info">
+    <div class="site-domain" id="site-domain">Analyzing...</div>
+    <div class="site-url" id="site-url"></div>
+  </section>
+
+  <!-- OVERALL SCORE -->
+  <section class="score-section">
+    <div class="score-circle">
+      <div class="score-number" id="score-number">--</div>
+      <div class="score-label">/ 100</div>
+    </div>
+    <div class="risk-badge" id="risk-badge">
+      <span id="risk-label">Scanning...</span>
+    </div>
+  </section>
+
+  <!-- CATEGORY BREAKDOWN -->
+  <section class="categories">
+    <div class="category-row">
+      <span class="category-icon">🔐</span>
+      <span class="category-name">Security</span>
+      <span class="category-score" id="cat-security">--</span>
+      <span class="category-level" id="cat-security-level">--</span>
+    </div>
+    <div class="category-row">
+      <span class="category-icon">🕵️</span>
+      <span class="category-name">Privacy</span>
+      <span class="category-score" id="cat-privacy">--</span>
+      <span class="category-level" id="cat-privacy-level">--</span>
+    </div>
+    <div class="category-row">
+      <span class="category-icon">🎣</span>
+      <span class="category-name">Phishing</span>
+      <span class="category-score" id="cat-phishing">--</span>
+      <span class="category-level" id="cat-phishing-level">--</span>
+    </div>
+    <div class="category-row">
+      <span class="category-icon">🌐</span>
+      <span class="category-name">Resources</span>
+      <span class="category-score" id="cat-resources">--</span>
+      <span class="category-level" id="cat-resources-level">--</span>
+    </div>
+  </section>
+
+  <!-- KEY FINDINGS -->
+  <section class="findings">
+    <div class="findings-title">Key Findings</div>
+    <ul class="findings-list" id="findings-list">
+      <li class="finding-item neutral">
+        <span class="finding-icon">⏳</span>
+        <span class="finding-text">Analysis in progress...</span>
+      </li>
+    </ul>
+  </section>
+
+  <!-- FOOTER ACTIONS -->
+  <footer class="footer">
+    <button class="btn-full-report" id="btn-full-report">
+      View Full Analysis
+    </button>
+    <button class="btn-rescan" id="btn-rescan">
+      🔄 Rescan
+    </button>
+  </footer>
+
+</body>
+<script src="popup.js"></script>
+</html>
