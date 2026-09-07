@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:;" />
+  <title>WebGuard — Full Analysis</title>
+  <link rel="stylesheet" href="dashboard.css" />
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header class="header">
+    <div class="header-left">
+      <img src="../icons/icon48.png" alt="WebGuard" class="logo" />
+      <div>
+        <div class="brand">WebGuard</div>
+        <div class="tagline">Explainable Website Security & Privacy Auditor</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <span class="scan-time" id="scan-time"></span>
+      <button class="btn-rescan" id="btn-rescan">🔄 Rescan</button>
+    </div>
+  </header>
+
+  <!-- SITE BANNER -->
+  <div class="site-banner" id="site-banner">
+    <div class="site-info">
+      <div class="site-domain" id="site-domain">Loading...</div>
+      <div class="site-url" id="site-url"></div>
+    </div>
+    <div class="score-display">
+      <div class="score-number" id="score-number">--</div>
+      <div class="score-meta">
+        <div class="score-max">/ 100</div>
+        <div class="risk-badge" id="risk-badge">Scanning...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DISCLAIMER -->
+  <div class="disclaimer">
+    ℹ This is a heuristic risk assessment based on observable indicators.
+    It does not guarantee that a website is safe or unsafe.
+  </div>
+
+  <!-- NAV TABS -->
+  <nav class="tab-nav">
+    <button class="tab-btn active" data-tab="overview">Overview</button>
+    <button class="tab-btn" data-tab="security">Security</button>
+    <button class="tab-btn" data-tab="privacy">Privacy</button>
+    <button class="tab-btn" data-tab="phishing">Phishing</button>
+    <button class="tab-btn" data-tab="resources">Resources</button>
+    <button class="tab-btn" data-tab="recommendations">Advice</button>
+  </nav>
+
+  <!-- TAB CONTENT -->
+  <main class="tab-content">
+
+    <!-- OVERVIEW TAB -->
+    <section class="tab-panel active" id="tab-overview">
+
+      <div class="category-grid">
+        <div class="category-card" id="card-security">
+          <div class="card-icon">🔐</div>
+          <div class="card-label">Security</div>
+          <div class="card-score" id="ov-security-score">--</div>
+          <div class="card-level" id="ov-security-level">--</div>
+          <div class="card-bar"><div class="card-bar-fill" id="ov-security-bar"></div></div>
+        </div>
+        <div class="category-card" id="card-privacy">
+          <div class="card-icon">🕵️</div>
+          <div class="card-label">Privacy</div>
+          <div class="card-score" id="ov-privacy-score">--</div>
+          <div class="card-level" id="ov-privacy-level">--</div>
+          <div class="card-bar"><div class="card-bar-fill" id="ov-privacy-bar"></div></div>
+        </div>
+        <div class="category-card" id="card-phishing">
+          <div class="card-icon">🎣</div>
+          <div class="card-label">Phishing</div>
+          <div class="card-score" id="ov-phishing-score">--</div>
+          <div class="card-level" id="ov-phishing-level">--</div>
+          <div class="card-bar"><div class="card-bar-fill" id="ov-phishing-bar"></div></div>
+        </div>
+        <div class="category-card" id="card-resources">
+          <div class="card-icon">🌐</div>
+          <div class="card-label">Resources</div>
+          <div class="card-score" id="ov-resources-score">--</div>
+          <div class="card-level" id="ov-resources-level">--</div>
+          <div class="card-bar"><div class="card-bar-fill" id="ov-resources-bar"></div></div>
+        </div>
+      </div>
+
+      <div class="section-title">Summary</div>
+      <div class="summary-box" id="summary-text">Analyzing...</div>
+
+      <div class="section-title">Key Findings</div>
+      <ul class="findings-list" id="ov-findings"></ul>
+
+    </section>
+
+    <!-- SECURITY TAB -->
+    <section class="tab-panel" id="tab-security">
+      <div class="section-title">Security Analysis</div>
+      <div class="section-desc">
+        Evaluates HTTPS usage, mixed content, security headers, form security, and suspicious page behaviors.
+      </div>
+      <div class="score-row">
+        <span class="score-row-label">Security Score</span>
+        <span class="score-row-value" id="sec-score">--</span>
+      </div>
+      <ul class="findings-list" id="sec-findings"></ul>
+    </section>
+
+    <!-- PRIVACY TAB -->
+    <section class="tab-panel" id="tab-privacy">
+      <div class="section-title">Privacy Analysis</div>
+      <div class="section-desc">
+        Evaluates third-party domains, tracking resources, advertising scripts, analytics services, and data-sharing indicators.
+      </div>
+      <div class="score-row">
+        <span class="score-row-label">Privacy Score</span>
+        <span class="score-row-value" id="priv-score">--</span>
+      </div>
+      <ul class="findings-list" id="priv-findings"></ul>
+
+      <div class="section-title" style="margin-top:20px;">Third-Party Domains Detected</div>
+      <div class="domain-list" id="domain-list">
+        <span class="muted">No third-party domains detected.</span>
+      </div>
+    </section>
+
+    <!-- PHISHING TAB -->
+    <section class="tab-panel" id="tab-phishing">
+      <div class="section-title">Phishing Analysis</div>
+      <div class="section-desc">
+        Heuristic assessment of phishing indicators. This does not definitively identify phishing — it evaluates observable risk signals.
+      </div>
+      <div class="score-row">
+        <span class="score-row-label">Phishing Score</span>
+        <span class="score-row-value" id="phi-score">--</span>
+      </div>
+      <ul class="findings-list" id="phi-findings"></ul>
+    </section>
+
+    <!-- RESOURCES TAB -->
+    <section class="tab-panel" id="tab-resources">
+      <div class="section-title">Resource Analysis</div>
+      <div class="section-desc">
+        Evaluates scripts, iframes, third-party resources, and network complexity.
+      </div>
+      <div class="score-row">
+        <span class="score-row-label">Resource Score</span>
+        <span class="score-row-value" id="res-score">--</span>
+      </div>
+
+      <div class="stats-grid" id="stats-grid">
+        <div class="stat-box">
+          <div class="stat-number" id="stat-scripts">--</div>
+          <div class="stat-label">Total Scripts</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-number" id="stat-third-scripts">--</div>
+          <div class="stat-label">3rd-Party Scripts</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-number" id="stat-iframes">--</div>
+          <div class="stat-label">Iframes</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-number" id="stat-third-domains">--</div>
+          <div class="stat-label">3rd-Party Domains</div>
+        </div>
+      </div>
+
+      <ul class="findings-list" id="res-findings"></ul>
+    </section>
+
+    <!-- RECOMMENDATIONS TAB -->
+    <section class="tab-panel" id="tab-recommendations">
+      <div class="section-title">Recommendations</div>
+      <div class="section-desc">
+        Actions you can take based on the findings for this website.
+      </div>
+      <ul class="rec-list" id="rec-list"></ul>
+
+      <div class="section-title" style="margin-top:24px;">Learn More</div>
+      <div class="edu-list" id="edu-list"></div>
+    </section>
+
+  </main>
+
+  <script src="dashboard.js"></script>
+</body>
+</html>
