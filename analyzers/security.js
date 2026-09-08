@@ -137,7 +137,7 @@ export function analyzeSecurity(pageData) {
 // LOGIN FORM SECURITY
 // =====================
 if (pageData.hasPasswordField && pageData.formCount > 0) {
-  score -= 4;
+  score -= 6;
   findings.push({
     type: 'warning',
     icon: '⚠',
