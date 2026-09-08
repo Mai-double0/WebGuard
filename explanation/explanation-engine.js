@@ -11,7 +11,7 @@ export function generateExplanation(result) {
   const { score, riskLevel, riskLabel, categories, findings, pageData } = result;
 
   return {
-    summary:          generateSummary(score, riskLevel, pageData),
+    summary:          generateSummary(score, riskLevel, riskLabel, pageData),
     scoreBreakdown:   generateScoreBreakdown(categories),
     findingDetails:   generateFindingDetails(findings),
     recommendations:  generateRecommendations(result),
@@ -23,7 +23,7 @@ export function generateExplanation(result) {
 // SUMMARY
 // =====================
 
-function generateSummary(score, riskLevel, pageData) {
+function generateSummary(score, riskLevel, riskLabel, pageData) {
   const domain = pageData?.domain || 'this website';
 
   const summaries = {
