@@ -72,14 +72,57 @@ async function triggerAnalysis(tabId, url) {
       files: ['content/content.js']
     });
   } catch (err) {
-    console.warn(`WebGuard: Could not inject content script on tab ${tabId}:`, err.message);
-    setScanState(tabId, {
-      status: 'error',
-      url,
-      error: 'Page could not be analyzed (restricted or protected page).'
-    });
-    chrome.action.setBadgeText({ tabId, text: '?' });
-    chrome.action.setBadgeBackgroundColor({ tabId, color: BADGE_COLORS['default'] });
+    console.warn(`WebGuard: Content script blocked on tab ${tabId}:`, err.message);
+
+    // Fall back to URL-only analysis — no DOM access
+    try {
+      const urlObj = new URL(url);
+      const fallbackData = {
+        url,
+        domain:               urlObj.hostname,
+        protocol:             urlObj.protocol,
+        scripts:              [],
+        thirdPartyScripts:    [],
+        stylesheets:          [],
+        iframes:              [],
+        thirdPartyIframes:    [],
+        hiddenIframes:        [],
+        thirdPartyImages:     [],
+        thirdPartyDomains:    [],
+        trackingResources:    [],
+        adResources:          [],
+        analyticsResources:   [],
+        hasPasswordField:     false,
+        hasEmailField:        false,
+        hasCreditCard:        false,
+        externalFormActions:  [],
+        formCount:            0,
+        metaTags:             {},
+        hasMetaCSP:           false,
+        mixedContentIndicators: [],
+        subdomainCount:       urlObj.hostname.split('.').length - 2,
+        hasIPAddress:         /^(\d{1,3}\.){3}\d{1,3}$/.test(urlObj.hostname),
+        hasPunycode:          urlObj.hostname.includes('xn--'),
+        hasSuspiciousChars:   /[^a-z0-9\-.]/.test(urlObj.hostname),
+        urlLength:            url.length,
+        hasEncodedChars:      url.includes('%'),
+        hasDownloadLinks:     false,
+        hasBeforeUnload:      false,
+        externalLinks:        [],
+        collectedAt:          Date.now(),
+        limitedAnalysis:      true  // flag so UI can show a note
+      };
+
+      analyzeAndScore(tabId, fallbackData);
+    } catch (parseErr) {
+      setScanState(tabId, {
+        status: 'error',
+        url,
+        error: 'Page could not be analyzed (content blocked by site security policy).'
+      });
+      chrome.action.setBadgeText({ tabId, text: '?' });
+      chrome.action.setBadgeBackgroundColor({ tabId, color: BADGE_COLORS['default'] });
+    }
   }
 }
 

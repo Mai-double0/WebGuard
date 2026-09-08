@@ -118,6 +118,12 @@ function renderResult(result) {
   badge.className = `risk-badge ${riskLevel}`;
   setText('risk-label', riskLabel);
 
+  // Show limited analysis note if applicable
+  const noteEl = document.getElementById('limited-note');
+  if (result.pageData?.limitedAnalysis && noteEl) {
+    noteEl.style.display = 'block';
+  }
+
   // Category scores
   if (categories) {
     renderCategory('security',  categories.security,  25);
@@ -136,7 +142,12 @@ function renderResult(result) {
   renderFindings(findings || []);
 }
 
-function renderCategory(name, score, max) {
+function renderCategory(name, catObj, max) {
+  // catObj comes in as { score: X, maxScore: Y } — extract the number
+  const score = (typeof catObj === 'object' && catObj !== null)
+    ? catObj.score
+    : catObj;
+
   if (score === undefined || score === null) {
     setText(`cat-${name}`, '--');
     setText(`cat-${name}-level`, '--');
