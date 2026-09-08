@@ -133,6 +133,32 @@ export function analyzeSecurity(pageData) {
       category: 'security'
     });
   }
+  // =====================
+// LOGIN FORM SECURITY
+// =====================
+if (pageData.hasPasswordField && pageData.formCount > 0) {
+  score -= 4;
+  findings.push({
+    type: 'warning',
+    icon: '⚠',
+    text: 'Login form detected — verify this site is legitimate before entering credentials.',
+    category: 'security'
+  });
+}
+
+// =====================
+// NO SECURITY HEADERS (heuristic — check via meta tags only)
+// =====================
+const hasAnySecurityMeta = pageData.hasMetaCSP;
+if (!hasAnySecurityMeta && pageData.protocol === 'https:') {
+  score -= 3;
+  findings.push({
+    type: 'warning',
+    icon: '⚠',
+    text: 'No security-hardening meta tags detected. Security headers may be absent.',
+    category: 'security'
+  });
+}
 
   // Clamp score
   score = Math.max(0, Math.min(25, score));

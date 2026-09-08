@@ -72,7 +72,7 @@ export function analyzePhishing(pageData) {
   // PASSWORD FIELD
   // =====================
   if (pageData.hasPasswordField) {
-    score -= 3;
+    score -= 6;
     findings.push({
       type: 'warning',
       icon: '⚠',
