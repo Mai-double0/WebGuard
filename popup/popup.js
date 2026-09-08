@@ -121,7 +121,7 @@ function renderResult(result) {
   // Show limited analysis note if applicable
   const noteEl = document.getElementById('limited-note');
   if (result.pageData?.limitedAnalysis && noteEl) {
-    noteEl.style.display = 'block';
+  noteEl.classList.remove('hidden');
   }
 
   // Category scores
