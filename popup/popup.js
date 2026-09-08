@@ -200,10 +200,20 @@ function sanitize(str) {
 // =====================
 
 function openDashboard(tabId, result) {
-  const params = new URLSearchParams({ tabId: String(tabId) });
-  chrome.tabs.create({
-    url: chrome.runtime.getURL(`dashboard/dashboard.html?${params}`)
-  });
+  if (result && result.status === 'complete') {
+    // Store result in chrome.storage.session so dashboard can retrieve it
+    chrome.storage.session.set({ [`webguard_result_${tabId}`]: result }, () => {
+      const params = new URLSearchParams({ tabId: String(tabId) });
+      chrome.tabs.create({
+        url: chrome.runtime.getURL(`dashboard/dashboard.html?${params}`)
+      });
+    });
+  } else {
+    const params = new URLSearchParams({ tabId: String(tabId) });
+    chrome.tabs.create({
+      url: chrome.runtime.getURL(`dashboard/dashboard.html?${params}`)
+    });
+  }
 }
 
 // =====================

@@ -265,7 +265,25 @@ document.addEventListener('DOMContentLoaded', async () => {
   const maxAttempts = 5;
 
   function tryLoad() {
-    attempts++;
+  attempts++;
+
+  // First try session storage (most reliable — set by popup before opening dashboard)
+  chrome.storage.session.get([`webguard_result_${tabId}`], (sessionData) => {
+    const sessionResult = sessionData?.[`webguard_result_${tabId}`];
+
+    if (sessionResult && sessionResult.status === 'complete') {
+      const explanation = generateExplanation(sessionResult);
+      renderHeader(sessionResult);
+      renderOverview(sessionResult, explanation);
+      renderSecurityTab(sessionResult, explanation);
+      renderPrivacyTab(sessionResult, explanation);
+      renderPhishingTab(sessionResult, explanation);
+      renderResourcesTab(sessionResult, explanation);
+      renderRecommendations(explanation);
+      return;
+    }
+
+    // Fall back to service worker message
     chrome.runtime.sendMessage({ type: 'GET_SCAN_RESULT', tabId }, (response) => {
       if (chrome.runtime.lastError) {
         renderError('Could not connect to WebGuard service worker.');
@@ -278,7 +296,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (attempts < maxAttempts) {
           setTimeout(tryLoad, 800);
         } else {
-          renderError('Scan is taking too long. Close this tab, wait a moment, and try View Full Analysis again.');
+          renderError('Scan timed out. Close this tab and click View Full Analysis again.');
         }
         return;
       }
@@ -297,19 +315,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         renderPhishingTab(result, explanation);
         renderResourcesTab(result, explanation);
         renderRecommendations(explanation);
-        return;
       }
-
-      renderError('Unexpected state. Try rescanning from the popup.');
-    });
-  }
-
-  tryLoad();
-
-  // Rescan button
-  el('btn-rescan')?.addEventListener('click', () => {
-    chrome.runtime.sendMessage({ type: 'RESCAN', tabId }, () => {
-      setTimeout(() => window.location.reload(), 2500);
     });
   });
-});
+}
