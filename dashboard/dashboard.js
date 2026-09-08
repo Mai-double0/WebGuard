@@ -252,46 +252,59 @@ function renderError(message) {
 document.addEventListener('DOMContentLoaded', async () => {
   initTabs();
 
-  // Get tabId from URL params
   const params = new URLSearchParams(window.location.search);
   const tabId  = parseInt(params.get('tabId'));
 
   if (!tabId) {
-    renderError('No tab ID provided. Please open WebGuard from the extension popup.');
+    renderError('No tab ID provided. Open WebGuard from the extension popup.');
     return;
   }
 
-  // Request result from service worker
-  chrome.runtime.sendMessage({ type: 'GET_SCAN_RESULT', tabId }, (response) => {
-    if (chrome.runtime.lastError) {
-      renderError('Could not connect to WebGuard service worker.');
-      return;
-    }
+  // Poll for result — retry up to 5 times with 800ms delay
+  let attempts = 0;
+  const maxAttempts = 5;
 
-    const result = response?.result;
+  function tryLoad() {
+    attempts++;
+    chrome.runtime.sendMessage({ type: 'GET_SCAN_RESULT', tabId }, (response) => {
+      if (chrome.runtime.lastError) {
+        renderError('Could not connect to WebGuard service worker.');
+        return;
+      }
 
-    if (!result || result.status === 'error') {
-      renderError(result?.error || 'No scan result available. Try rescanning from the popup.');
-      return;
-    }
+      const result = response?.result;
 
-    if (result.status === 'scanning') {
-      renderError('Scan still in progress. Close this tab and try again in a moment.');
-      return;
-    }
+      if (!result || result.status === 'scanning') {
+        if (attempts < maxAttempts) {
+          setTimeout(tryLoad, 800);
+        } else {
+          renderError('Scan is taking too long. Close this tab, wait a moment, and try View Full Analysis again.');
+        }
+        return;
+      }
 
-    // Generate explanation
-    const explanation = generateExplanation(result);
+      if (result.status === 'error') {
+        renderError(result.error || 'Analysis failed.');
+        return;
+      }
 
-    // Render all sections
-    renderHeader(result);
-    renderOverview(result, explanation);
-    renderSecurityTab(result, explanation);
-    renderPrivacyTab(result, explanation);
-    renderPhishingTab(result, explanation);
-    renderResourcesTab(result, explanation);
-    renderRecommendations(explanation);
-  });
+      if (result.status === 'complete') {
+        const explanation = generateExplanation(result);
+        renderHeader(result);
+        renderOverview(result, explanation);
+        renderSecurityTab(result, explanation);
+        renderPrivacyTab(result, explanation);
+        renderPhishingTab(result, explanation);
+        renderResourcesTab(result, explanation);
+        renderRecommendations(explanation);
+        return;
+      }
+
+      renderError('Unexpected state. Try rescanning from the popup.');
+    });
+  }
+
+  tryLoad();
 
   // Rescan button
   el('btn-rescan')?.addEventListener('click', () => {
