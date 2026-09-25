@@ -321,7 +321,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setText('site-url', tabUrl);
 
     chrome.runtime.sendMessage(
-      { type: 'RESCAN', tabId, url: tabUrl },
+      { type: 'RESCAN', tabId },
       () => {
         // Poll for result after rescan
         setTimeout(() => {

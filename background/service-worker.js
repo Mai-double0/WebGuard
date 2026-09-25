@@ -249,30 +249,114 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 });
 
 // =====================
+// MESSAGE VALIDATION
+// Content scripts run inside web pages, so their messages are treated as
+// untrusted input: only the fields the analyzers read are kept, each with
+// the expected type. Scan results and rescans are only for extension pages.
+// =====================
+const isString  = v => typeof v === 'string';
+const optString = v => (isString(v) ? v : null);
+const strings   = v => (Array.isArray(v) ? v.filter(isString) : []);
+const objects   = (v, pick) => (Array.isArray(v) ? v.filter(o => o && typeof o === 'object').map(pick) : []);
+const count     = v => (Number.isFinite(v) ? v : 0);
+
+const frame = f => ({ src: optString(f.src), sandbox: optString(f.sandbox), hidden: f.hidden === true });
+
+function isExtensionPage(sender) {
+  return sender.id === chrome.runtime.id &&
+         isString(sender.url) && sender.url.startsWith(chrome.runtime.getURL(''));
+}
+
+function isOwnContentScript(sender) {
+  return sender.id === chrome.runtime.id &&
+         Number.isInteger(sender.tab?.id) && sender.frameId === 0;
+}
+
+// Returns clean page data, or null if the message does not describe the sender's page.
+function normalizePageData(raw, sender) {
+  if (!raw || typeof raw !== 'object' || !isString(raw.url)) return null;
+  let url;
+  try {
+    url = new URL(raw.url);
+    if (url.origin !== new URL(sender.url).origin) return null;
+  } catch {
+    return null;
+  }
+
+  return {
+    url:                    raw.url,
+    domain:                 url.hostname,
+    protocol:               url.protocol,
+    scripts:                strings(raw.scripts),
+    thirdPartyScripts:      strings(raw.thirdPartyScripts),
+    iframes:                objects(raw.iframes, frame),
+    thirdPartyIframes:      objects(raw.thirdPartyIframes, frame),
+    hiddenIframes:          objects(raw.hiddenIframes, frame),
+    thirdPartyImages:       strings(raw.thirdPartyImages),
+    thirdPartyDomains:      strings(raw.thirdPartyDomains),
+    trackingResources:      strings(raw.trackingResources),
+    adResources:            strings(raw.adResources),
+    analyticsResources:     strings(raw.analyticsResources),
+    hasPasswordField:       raw.hasPasswordField === true,
+    hasCreditCard:          raw.hasCreditCard === true,
+    externalFormActions:    strings(raw.externalFormActions),
+    hasMetaCSP:             raw.hasMetaCSP === true,
+    mixedContentIndicators: strings(raw.mixedContentIndicators),
+    subdomainCount:         count(raw.subdomainCount),
+    hasIPAddress:           raw.hasIPAddress === true,
+    hasPunycode:            raw.hasPunycode === true,
+    hasSuspiciousChars:     raw.hasSuspiciousChars === true,
+    urlLength:              count(raw.urlLength),
+    hasEncodedChars:        raw.hasEncodedChars === true,
+    hasDownloadLinks:       raw.hasDownloadLinks === true,
+    downloadLinks:          objects(raw.downloadLinks, d => ({
+      host:      optString(d.host),
+      protocol:  optString(d.protocol),
+      sameSite:  d.sameSite === true,
+      isIP:      d.isIP === true,
+      doubleExt: d.doubleExt === true
+    })),
+    passwordForms:          objects(raw.passwordForms, f => ({
+      method:         isString(f.method) ? f.method : 'get',
+      actionProtocol: optString(f.actionProtocol),
+      actionExternal: f.actionExternal === true
+    })),
+    thirdPartyNoSRI:        count(raw.thirdPartyNoSRI),
+    sessionIdInUrl:         raw.sessionIdInUrl === true
+  };
+}
+
+// =====================
 // MESSAGE HANDLER
 // =====================
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (!message || typeof message !== 'object') return;
 
   if (message.type === 'PAGE_DATA_COLLECTED') {
-    const tabId = sender.tab?.id;
-    if (!tabId) { sendResponse({ status: 'no-tab' }); return true; }
-    analyzeAndScore(tabId, message.data);
+    if (!isOwnContentScript(sender)) return;
+    const pageData = normalizePageData(message.data, sender);
+    if (!pageData) { sendResponse({ status: 'invalid' }); return; }
+    analyzeAndScore(sender.tab.id, pageData);
     sendResponse({ status: 'received' });
-    return true;
+    return;
   }
 
+  if (!isExtensionPage(sender) || !Number.isInteger(message.tabId)) return;
+  const tabId = message.tabId;
+
   if (message.type === 'GET_SCAN_RESULT') {
-    sendResponse({ result: getScanState(message.tabId) });
-    return true;
+    sendResponse({ result: getScanState(tabId) });
+    return;
   }
 
   if (message.type === 'RESCAN') {
-    setScanState(message.tabId, { status: 'scanning', url: message.url });
-    triggerAnalysis(message.tabId, message.url);
+    // Use the tab's real URL rather than one supplied in the message
+    chrome.tabs.get(tabId)
+      .then(tab => triggerAnalysis(tabId, tab.url))
+      .catch(err => console.warn('WebGuard: rescan failed:', err.message));
     sendResponse({ status: 'rescanning' });
-    return true;
+    return;
   }
-
 });
 
 // =====================
