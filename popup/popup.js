@@ -2,43 +2,7 @@
 // Wires the popup UI to the background service worker.
 // Fetches scan result for the current tab and renders it.
 
-// =====================
-// RISK LEVEL HELPERS
-// =====================
-
-function getRiskLevel(score) {
-  if (score >= 90) return 'very-low';
-  if (score >= 75) return 'low';
-  if (score >= 50) return 'moderate';
-  if (score >= 25) return 'high';
-  return 'critical';
-}
-
-function getRiskLabel(score) {
-  if (score >= 90) return 'VERY LOW RISK';
-  if (score >= 75) return 'LOW RISK';
-  if (score >= 50) return 'MODERATE RISK';
-  if (score >= 25) return 'HIGH RISK';
-  return 'CRITICAL RISK';
-}
-
-function getCategoryLevel(score, max) {
-  const pct = (score / max) * 100;
-  if (pct >= 90) return 'very-low';
-  if (pct >= 75) return 'low';
-  if (pct >= 50) return 'moderate';
-  if (pct >= 25) return 'high';
-  return 'critical';
-}
-
-function getCategoryLabel(score, max) {
-  const pct = (score / max) * 100;
-  if (pct >= 90) return 'LOW';
-  if (pct >= 75) return 'LOW';
-  if (pct >= 50) return 'MODERATE';
-  if (pct >= 25) return 'HIGH';
-  return 'CRITICAL';
-}
+import { getCategoryLevel, getCategoryLabel, isAnalyzableUrl } from '../utils/helpers.js';
 
 // =====================
 // DOM HELPERS
@@ -51,11 +15,6 @@ function el(id) {
 function setText(id, text) {
   const e = el(id);
   if (e) e.textContent = text;
-}
-
-function setClass(id, className) {
-  const e = el(id);
-  if (e) e.className = className;
 }
 
 // =====================
@@ -219,19 +178,17 @@ function sanitize(str) {
 // =====================
 
 function openDashboard(tabId, result) {
-  if (result && result.status === 'complete') {
-    // Store result in chrome.storage.session so dashboard can retrieve it
-    chrome.storage.session.set({ [`webguard_result_${tabId}`]: result }, () => {
-      const params = new URLSearchParams({ tabId: String(tabId) });
-      chrome.tabs.create({
-        url: chrome.runtime.getURL(`dashboard/dashboard.html?${params}`)
-      });
-    });
-  } else {
+  const open = () => {
     const params = new URLSearchParams({ tabId: String(tabId) });
     chrome.tabs.create({
       url: chrome.runtime.getURL(`dashboard/dashboard.html?${params}`)
     });
+  };
+  if (result && result.status === 'complete') {
+    // Store result in chrome.storage.session so dashboard can retrieve it
+    chrome.storage.session.set({ [`webguard_result_${tabId}`]: result }, open);
+  } else {
+    open();
   }
 }
 
@@ -252,12 +209,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const tabUrl = tab.url || '';
 
   // Skip non-analyzable pages
-  if (
-    tabUrl.startsWith('chrome://') ||
-    tabUrl.startsWith('chrome-extension://') ||
-    tabUrl === 'about:blank' ||
-    tabUrl === ''
-  ) {
+  if (!isAnalyzableUrl(tabUrl)) {
     renderError('WebGuard cannot analyze browser internal pages.');
     return;
   }

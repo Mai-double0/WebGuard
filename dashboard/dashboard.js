@@ -1,5 +1,6 @@
 // dashboard/dashboard.js
 import { generateExplanation } from '../explanation/explanation-engine.js';
+import { getRiskLevel, getRiskColor, getCategoryLevel, getCategoryLabel } from '../utils/helpers.js';
 
 // =====================
 // UTILITIES
@@ -12,31 +13,6 @@ function sanitize(str) {
   const div = document.createElement('div');
   div.textContent = String(str ?? '');
   return div.innerHTML;
-}
-
-function getRiskLevel(score) {
-  if (score >= 90) return 'very-low';
-  if (score >= 75) return 'low';
-  if (score >= 50) return 'moderate';
-  if (score >= 25) return 'high';
-  return 'critical';
-}
-
-function getCategoryLevel(score, max) {
-  const pct = (score / max) * 100;
-  if (pct >= 90) return 'very-low';
-  if (pct >= 75) return 'low';
-  if (pct >= 50) return 'moderate';
-  if (pct >= 25) return 'high';
-  return 'critical';
-}
-
-function getCategoryLabel(score, max) {
-  const pct = (score / max) * 100;
-  if (pct >= 75) return 'LOW';
-  if (pct >= 50) return 'MODERATE';
-  if (pct >= 25) return 'HIGH';
-  return 'CRITICAL';
 }
 
 function formatTime(ts) {
@@ -98,11 +74,7 @@ function renderCategoryCard(name, score, maxScore) {
   const barEl = el(`ov-${name}-bar`);
   if (barEl) {
     barEl.style.width = `${pct}%`;
-    const colors = {
-      'very-low': '#22c55e', 'low': '#22c55e',
-      'moderate': '#eab308', 'high': '#f97316', 'critical': '#ef4444'
-    };
-    barEl.style.background = colors[level] || '#64748b';
+    barEl.style.background = getRiskColor(level);
   }
 }
 

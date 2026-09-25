@@ -2,33 +2,16 @@
 // Coordinates tab detection, response-header capture, analysis, and the toolbar badge.
 
 import { runRiskEngine } from '../scoring/risk-engine.js';
-
-const BADGE_COLORS = {
-  'very-low': '#22c55e',
-  'low':      '#22c55e',
-  'moderate': '#eab308',
-  'high':     '#f97316',
-  'critical': '#ef4444',
-  'default':  '#64748b'
-};
-
-function getRiskLevel(score) {
-  if (score >= 90) return 'very-low';
-  if (score >= 75) return 'low';
-  if (score >= 50) return 'moderate';
-  if (score >= 25) return 'high';
-  return 'critical';
-}
+import { getRiskLevel, getRiskColor, isAnalyzableUrl } from '../utils/helpers.js';
 
 function updateBadge(tabId, score) {
   if (score === null || score === undefined) {
     chrome.action.setBadgeText({ tabId, text: '...' });
-    chrome.action.setBadgeBackgroundColor({ tabId, color: BADGE_COLORS['default'] });
+    chrome.action.setBadgeBackgroundColor({ tabId, color: getRiskColor() });
     return;
   }
-  const level = getRiskLevel(score);
   chrome.action.setBadgeText({ tabId, text: String(score) });
-  chrome.action.setBadgeBackgroundColor({ tabId, color: BADGE_COLORS[level] });
+  chrome.action.setBadgeBackgroundColor({ tabId, color: getRiskColor(getRiskLevel(score)) });
 }
 
 // =====================
@@ -153,10 +136,7 @@ async function getCertErrorForHost(host) {
 // TRIGGER ANALYSIS
 // =====================
 async function triggerAnalysis(tabId, url) {
-  if (!url ||
-      url.startsWith('chrome://') ||
-      url.startsWith('chrome-extension://') ||
-      url === 'about:blank') {
+  if (!isAnalyzableUrl(url)) {
     chrome.action.setBadgeText({ tabId, text: '' });
     setScanState(tabId, null);
     return;
@@ -189,7 +169,7 @@ async function triggerAnalysis(tabId, url) {
         error: 'Page could not be analyzed (blocked by site security policy).'
       });
       chrome.action.setBadgeText({ tabId, text: '?' });
-      chrome.action.setBadgeBackgroundColor({ tabId, color: BADGE_COLORS['default'] });
+      chrome.action.setBadgeBackgroundColor({ tabId, color: getRiskColor() });
     }
   }
 }
@@ -409,6 +389,6 @@ async function analyzeAndScore(tabId, pageData) {
     console.error('WebGuard: Analysis error:', err);
     setScanState(tabId, { status: 'error', url: pageData.url, error: err.message });
     chrome.action.setBadgeText({ tabId, text: '?' });
-    chrome.action.setBadgeBackgroundColor({ tabId, color: BADGE_COLORS['default'] });
+    chrome.action.setBadgeBackgroundColor({ tabId, color: getRiskColor() });
   }
 }
