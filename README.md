@@ -18,10 +18,6 @@ WebGuard answers a different question:
 
 It does not replace Safe Browsing or antivirus software. It adds an explainable layer on top: every point deducted, every cap applied, and every verdict comes with a plain-language reason.
 
-| demo.testfire.net (intentionally vulnerable demo bank) | github.com |
-|---|---|
-| ![WebGuard on a vulnerable site](docs/screenshots/popup-testfire.png) | ![WebGuard on GitHub](docs/screenshots/popup-github.png) |
-
 ---
 
 ## ✨ Features
@@ -56,8 +52,6 @@ Passive checks for concrete weaknesses that browsers do not surface in their UI:
 - Every finding is labelled as positive, informational, warning, or danger
 - The full dashboard explains each finding in plain language and gives recommendations
 - Score caps are listed as findings, so the user always sees **why** a score was limited
-
-![WebGuard dashboard](docs/screenshots/dashboard.png)
 
 ---
 
@@ -101,7 +95,7 @@ The score is a **risk assessment**, never a "percentage safe".
 
 | Site | Score | Verdict | Main finding |
 |---|---|---|---|
-| demo.testfire.net | 49 High | ⛔ Do not enter sensitive data | Certificate error (`ERR_CERT_AUTHORITY_INVALID`) bypassed; CSP, HSTS, clickjacking protection missing |
+| demo.testfire.net (intentionally vulnerable demo bank) | 49 High | ⛔ Do not enter sensitive data | Certificate error (`ERR_CERT_AUTHORITY_INVALID`) bypassed; CSP, HSTS, clickjacking protection missing |
 | github.com | 93 Very Low | ✓ No blocking issues | Strong security headers; third-party scripts without SRI (informational) |
 
 ---
