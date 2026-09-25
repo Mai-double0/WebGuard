@@ -321,19 +321,25 @@ function normalizePageData(raw, sender) {
 // =====================
 // MESSAGE HANDLER
 // =====================
+// Every path replies, including rejected and unknown messages: a sender whose
+// message gets no reply sees "The message port closed before a response was
+// received." as chrome.runtime.lastError.
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (!message || typeof message !== 'object') return;
+  const ignore = (reason) => sendResponse({ status: 'ignored', reason });
+
+  if (!message || typeof message !== 'object') { ignore('malformed-message'); return; }
 
   if (message.type === 'PAGE_DATA_COLLECTED') {
-    if (!isOwnContentScript(sender)) return;
+    if (!isOwnContentScript(sender)) { ignore('not-a-tab-top-frame'); return; }
     const pageData = normalizePageData(message.data, sender);
-    if (!pageData) { sendResponse({ status: 'invalid' }); return; }
+    if (!pageData) { ignore('invalid-page-data'); return; }
     analyzeAndScore(sender.tab.id, pageData);
     sendResponse({ status: 'received' });
     return;
   }
 
-  if (!isExtensionPage(sender) || !Number.isInteger(message.tabId)) return;
+  if (!isExtensionPage(sender))         { ignore('untrusted-sender'); return; }
+  if (!Number.isInteger(message.tabId)) { ignore('invalid-tab-id'); return; }
   const tabId = message.tabId;
 
   if (message.type === 'GET_SCAN_RESULT') {
@@ -357,6 +363,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ status: 'rescanning' });
     return;
   }
+
+  ignore('unknown-type');
 });
 
 // =====================

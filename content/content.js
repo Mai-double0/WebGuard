@@ -334,7 +334,9 @@
   chrome.runtime.sendMessage({
     type: 'PAGE_DATA_COLLECTED',
     data: pageData
-  }, (response) => {
+  }, () => {
+    // A rejected page (e.g. one that is not a tab's top frame) is answered with
+    // { status: 'ignored' }, which is expected and needs no warning.
     if (chrome.runtime.lastError) {
       // Extension context may have reloaded — safe to ignore
       console.warn('WebGuard content script:', chrome.runtime.lastError.message);
