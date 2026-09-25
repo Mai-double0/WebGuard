@@ -84,7 +84,8 @@ export function analyzePhishing(pageData) {
       type: 'danger',
       icon: '✗',
       text: 'Login form appears together with other phishing indicators — do not enter credentials unless you are certain of this site.',
-      category: 'phishing'
+      category: 'phishing',
+      blocker: true
     });
   } else if (pageData.hasPasswordField) {
     findings.push({

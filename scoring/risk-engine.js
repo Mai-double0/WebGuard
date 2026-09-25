@@ -1,6 +1,6 @@
 // scoring/risk-engine.js
-// Combines the four analyzers into a final risk score, then applies
-// transparent caps so missing evidence never produces a "perfect" score.
+// Combines the four analyzers into a final risk score, applies transparent
+// caps, and produces a trust verdict: can this page be trusted with sensitive data?
 
 import { analyzeSecurity }  from '../analyzers/security.js';
 import { analyzePrivacy }   from '../analyzers/privacy.js';
@@ -8,12 +8,9 @@ import { analyzePhishing }  from '../analyzers/phishing.js';
 import { analyzeResources } from '../analyzers/resources.js';
 
 // Weights (sum = 100): Security 35, Privacy 25, Phishing 25, Resources 15
-// Caps:
-//   CEILING       — passive analysis can't rule out server-side flaws
-//   COVERAGE_CAP  — applied when some checks could not run
-//   Weakest link  — weak Security or Phishing limits the overall level
-const CEILING      = 95;
-const COVERAGE_CAP = 85;
+const CEILING      = 95;  // passive analysis can't rule out server-side flaws
+const COVERAGE_CAP = 85;  // some checks could not run
+const BLOCKER_CAP  = 49;  // a concrete reason not to trust the page
 
 export function getRiskLevel(score) {
   if (score >= 90) return 'very-low';
@@ -29,6 +26,25 @@ export function getRiskLabel(score) {
   if (score >= 50) return 'MODERATE RISK';
   if (score >= 25) return 'HIGH RISK';
   return 'CRITICAL RISK';
+}
+
+function buildVerdict(findings, score, coverageLimited) {
+  const blockers = findings.filter(f => f.blocker).map(f => f.text);
+  const cautions = findings.filter(f => f.caution).map(f => f.text);
+
+  if (blockers.length) {
+    return { level: 'no', label: 'Do not enter passwords or payment details', reasons: blockers.slice(0, 2) };
+  }
+  if (cautions.length) {
+    return { level: 'caution', label: 'Use with caution', reasons: cautions.slice(0, 2) };
+  }
+  if (score < 75) {
+    return { level: 'caution', label: 'Use with caution', reasons: ['Several weaker security or privacy indicators add up — see the findings.'] };
+  }
+  if (coverageLimited) {
+    return { level: 'caution', label: 'Not fully checked', reasons: ['Some checks could not run on this page, so WebGuard cannot give a full verdict.'] };
+  }
+  return { level: 'ok', label: 'No blocking issues found', reasons: ['Nothing observed suggests avoiding this page. This is not a guarantee of safety.'] };
 }
 
 export function runRiskEngine(pageData) {
@@ -53,6 +69,13 @@ export function runRiskEngine(pageData) {
     }
   };
 
+  const allFindings = [
+    ...security.findings,
+    ...phishing.findings,
+    ...privacy.findings,
+    ...resources.findings
+  ];
+
   // 1. Ceiling
   cap(CEILING, 'passive analysis cannot rule out server-side vulnerabilities, so WebGuard never reports zero risk.');
 
@@ -60,43 +83,49 @@ export function runRiskEngine(pageData) {
   const missing = [];
   if (!pageData.responseHeaders) missing.push('security headers were not captured');
   if (pageData.limitedAnalysis)  missing.push('page content could not be inspected');
-  if (missing.length) cap(COVERAGE_CAP, `some checks could not run (${missing.join('; ')}).`);
+  const coverageLimited = missing.length > 0;
+  if (coverageLimited) cap(COVERAGE_CAP, `some checks could not run (${missing.join('; ')}).`);
 
-  // 3. Weakest link (direct-risk categories only)
+  // 3. Blockers
+  if (allFindings.some(f => f.blocker)) {
+    cap(BLOCKER_CAP, 'a serious issue was found that makes this page unsafe for sensitive data.');
+  }
+
+  // 4. Weakest link (direct-risk categories only)
   const direct = [
     { label: 'Security', pct: security.score / 25 },
     { label: 'Phishing', pct: phishing.score / 25 }
   ];
   const worst = direct.reduce((a, b) => (b.pct < a.pct ? b : a));
   const worstPct = Math.round(worst.pct * 100);
-
   if (worst.pct < 0.4) {
-    cap(49, `${worst.label} score is weak (${worstPct}%); strong results in other categories should not hide it.`);
+    cap(49, `${worst.label} score is weak (${worstPct}%); strong results elsewhere should not hide it.`);
   } else if (worst.pct < 0.6) {
-    cap(74, `${worst.label} score is weak (${worstPct}%); strong results in other categories should not hide it.`);
+    cap(74, `${worst.label} score is weak (${worstPct}%); strong results elsewhere should not hide it.`);
   }
 
-  const allFindings = [
-    ...security.findings,
-    ...phishing.findings,
-    ...privacy.findings,
-    ...resources.findings
-  ];
+  // Order: cap reasons → blockers → other issues → positives
   const issues    = allFindings.filter(f => f.type !== 'positive');
   const positives = allFindings.filter(f => f.type === 'positive');
+  const findings  = [
+    ...scoreNotes,
+    ...issues.filter(f => f.blocker),
+    ...issues.filter(f => !f.blocker),
+    ...positives
+  ];
 
   return {
     score,
     riskLevel: getRiskLevel(score),
     riskLabel: getRiskLabel(score),
+    verdict:   buildVerdict(allFindings, score, coverageLimited),
     categories: {
       security:  { score: security.score,  maxScore: 25 },
       privacy:   { score: privacy.score,   maxScore: 30 },
       phishing:  { score: phishing.score,  maxScore: 25 },
       resources: { score: resources.score, maxScore: 20 }
     },
-    // Cap explanations first, so the user sees why the score is what it is
-    findings: [...scoreNotes, ...issues, ...positives],
+    findings,
     details: { security, privacy, phishing, resources },
     pageData
   };

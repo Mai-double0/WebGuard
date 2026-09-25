@@ -84,6 +84,8 @@ function renderScanning() {
       <span class="finding-icon">⏳</span>
       <span class="finding-text">Analysis in progress...</span>
     </li>`;
+
+    renderVerdict(null);
 }
 
 function renderError(message) {
@@ -99,6 +101,8 @@ function renderError(message) {
       <span class="finding-icon">ℹ</span>
       <span class="finding-text">${sanitize(message || 'Page could not be analyzed.')}</span>
     </li>`;
+
+    renderVerdict(null);
 }
 
 function renderResult(result) {
@@ -117,6 +121,7 @@ function renderResult(result) {
   const badge = el('risk-badge');
   badge.className = `risk-badge ${riskLevel}`;
   setText('risk-label', riskLabel);
+  renderVerdict(result.verdict);
 
   // Show limited analysis note if applicable
   const noteEl = document.getElementById('limited-note');
@@ -161,6 +166,20 @@ function renderCategory(name, catObj, max) {
     levelEl.textContent = label;
     levelEl.className = `category-level ${level}`;
   }
+}
+function renderVerdict(verdict) {
+  const box = el('verdict');
+  if (!box) return;
+
+  const levels = { no: '⛔', caution: '⚠', ok: '✓' };
+  if (!verdict || !levels[verdict.level]) {
+    box.className = 'verdict hidden';
+    return;
+  }
+
+  box.className = `verdict ${verdict.level}`;
+  setText('verdict-label', `${levels[verdict.level]} ${verdict.label}`);
+  setText('verdict-reason', (verdict.reasons || [])[0] || '');
 }
 
 function renderFindings(findings) {

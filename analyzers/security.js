@@ -1,6 +1,12 @@
 // analyzers/security.js
 // Security indicators. Observations alone are informational; points are
 // deducted only for real risk signals. Returns a score (0–25) and findings.
+//
+// Finding flags used by the trust verdict:
+//   blocker: true → do not trust this page with sensitive data
+//   caution: true → trust with care
+
+import { runDeepChecks } from './deep-checks.js';
 
 const SESSION_COOKIE = /sess|sid|auth|token|login|jsession|phpsessid|asp\.net/i;
 
@@ -8,8 +14,8 @@ export function analyzeSecurity(pageData) {
   const findings = [];
   let score = 25;
 
-  const add = (type, icon, text) =>
-    findings.push({ type, icon, text, category: 'security' });
+  const add = (type, icon, text, flags = {}) =>
+    findings.push({ type, icon, text, category: 'security', ...flags });
 
   const isHttps  = pageData.protocol === 'https:';
   const pageHost = (pageData.domain || '').replace(/^www\./, '');
@@ -21,7 +27,7 @@ export function analyzeSecurity(pageData) {
     add('positive', '✓', 'HTTPS connection detected — data is encrypted in transit.');
   } else {
     score -= 10;
-    add('danger', '✗', 'No HTTPS — connection is unencrypted. Avoid entering sensitive data.');
+    add('danger', '✗', 'No HTTPS — connection is unencrypted. Avoid entering sensitive data.', { caution: true });
   }
 
   // =====================
@@ -30,13 +36,20 @@ export function analyzeSecurity(pageData) {
   const mixedCount = pageData.mixedContentIndicators?.length || 0;
   if (mixedCount > 0) {
     score -= 5;
-    add('warning', '⚠', `Mixed content detected — ${mixedCount} HTTP resource(s) loaded on an HTTPS page.`);
+    add('warning', '⚠', `Mixed content detected — ${mixedCount} HTTP resource(s) loaded on an HTTPS page.`, { caution: true });
   }
 
   // =====================
   // SECURITY HEADERS & COOKIES
   // =====================
   score -= analyzeHeaders(pageData, isHttps, add);
+
+  // =====================
+  // DEEP CHECKS (certificate, login forms, vulnerable libraries, sessions)
+  // =====================
+  const deep = runDeepChecks(pageData, isHttps);
+  score -= deep.penalty;
+  findings.push(...deep.findings);
 
   // =====================
   // HIDDEN IFRAMES
@@ -59,7 +72,7 @@ export function analyzeSecurity(pageData) {
 
   if (risky.length > 0) {
     score -= 6;
-    add('danger', '✗', `${risky.length} executable download(s) with risky traits (unencrypted, IP-address host, or disguised file extension).`);
+    add('danger', '✗', `${risky.length} executable download(s) with risky traits (unencrypted, IP-address host, or disguised file extension).`, { blocker: true });
   } else if (offsite.length > 0) {
     score -= 1;
     add('neutral', 'ℹ', `${offsite.length} executable download(s) hosted on another domain — common for CDNs. Confirm the source if unsure.`);
@@ -73,15 +86,15 @@ export function analyzeSecurity(pageData) {
   const externalForms = pageData.externalFormActions?.length || 0;
   if (externalForms > 0 && pageData.hasPasswordField) {
     score -= 6;
-    add('danger', '✗', 'A login form submits to an external domain — credentials would leave this site.');
+    add('danger', '✗', 'A login form submits to an external domain — credentials would leave this site.', { blocker: true });
   } else if (externalForms > 0) {
     score -= 2;
-    add('warning', '⚠', `${externalForms} form(s) submit data to external domains — verify the destination.`);
+    add('warning', '⚠', `${externalForms} form(s) submit data to external domains — verify the destination.`, { caution: true });
   }
 
   if (pageData.hasPasswordField && !isHttps) {
     score -= 8;
-    add('danger', '✗', 'Password field on an unencrypted (HTTP) page — credentials could be intercepted.');
+    add('danger', '✗', 'Password field on an unencrypted (HTTP) page — credentials could be intercepted.', { blocker: true });
   }
 
   // =====================
@@ -89,7 +102,7 @@ export function analyzeSecurity(pageData) {
   // =====================
   if (pageData.hasIPAddress) {
     score -= 6;
-    add('danger', '✗', 'Site is accessed via IP address instead of a domain name — unusual for legitimate sites.');
+    add('danger', '✗', 'Site is accessed via IP address instead of a domain name — unusual for legitimate sites.', { caution: true });
   }
 
   score = Math.max(0, Math.min(25, score));
@@ -112,7 +125,6 @@ function analyzeHeaders(pageData, isHttps, add) {
   const h = rh.headers || {};
   let penalty = 0;
 
-  // Content-Security-Policy
   const csp = h['content-security-policy'] || '';
   if (csp) {
     add('positive', '✓', 'Content-Security-Policy header present.');
@@ -123,7 +135,6 @@ function analyzeHeaders(pageData, isHttps, add) {
     add('warning', '⚠', 'Content-Security-Policy not set — less protection against script injection (XSS). A hardening gap, not proof of a vulnerability.');
   }
 
-  // HSTS (only meaningful on HTTPS)
   if (isHttps) {
     if (h['strict-transport-security']) {
       add('positive', '✓', 'HSTS header present — browsers will refuse to downgrade this site to HTTP.');
@@ -133,32 +144,27 @@ function analyzeHeaders(pageData, isHttps, add) {
     }
   }
 
-  // Clickjacking protection
   const frameProtected = h['x-frame-options'] || /frame-ancestors/i.test(csp);
   if (!frameProtected) {
     penalty += 2;
     add('warning', '⚠', 'No clickjacking protection (X-Frame-Options or CSP frame-ancestors) — another site could embed this page.');
   }
 
-  // MIME sniffing
   if (!(h['x-content-type-options'] || '').toLowerCase().includes('nosniff')) {
     penalty += 1;
     add('warning', '⚠', 'X-Content-Type-Options: nosniff not set.');
   }
 
-  // Referrer-Policy — modern browsers have a safe default, so informational only
   if (!h['referrer-policy']) {
     add('neutral', 'ℹ', 'Referrer-Policy not set — the browser default applies. Not scored.');
   }
 
-  // Server version disclosure
   const banner = [h['server'], h['x-powered-by']].filter(Boolean).find(v => /\d/.test(v));
   if (banner) {
     penalty += 1;
     add('warning', '⚠', `Server software version disclosed ("${banner.slice(0, 60)}") — makes it easier to look up known vulnerabilities.`);
   }
 
-  // Session cookie flags
   const cookies = (rh.setCookies || []).map(c => ({
     name:     c.split('=')[0].trim(),
     secure:   /;\s*secure/i.test(c),
@@ -169,14 +175,14 @@ function analyzeHeaders(pageData, isHttps, add) {
   const noHttpOnly = sessionCookies.filter(c => !c.httpOnly);
   if (noHttpOnly.length > 0) {
     penalty += 2;
-    add('warning', '⚠', `Session cookie(s) without HttpOnly (${noHttpOnly.slice(0, 3).map(c => c.name).join(', ')}) — page scripts can read them, so an XSS bug could steal the session.`);
+    add('warning', '⚠', `Session cookie(s) without HttpOnly (${noHttpOnly.slice(0, 3).map(c => c.name).join(', ')}) — page scripts can read them, so an XSS bug could steal the session.`, { caution: true });
   }
 
   if (isHttps) {
     const noSecure = sessionCookies.filter(c => !c.secure);
     if (noSecure.length > 0) {
       penalty += 2;
-      add('warning', '⚠', `Session cookie(s) without the Secure flag (${noSecure.slice(0, 3).map(c => c.name).join(', ')}) — could be sent over unencrypted HTTP.`);
+      add('warning', '⚠', `Session cookie(s) without the Secure flag (${noSecure.slice(0, 3).map(c => c.name).join(', ')}) — could be sent over unencrypted HTTP.`, { caution: true });
     }
   }
 

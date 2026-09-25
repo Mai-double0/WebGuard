@@ -295,3 +295,20 @@ body {
 .hidden {
   display: none;
 }
+
+.verdict {
+  margin: 0 16px 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border-left: 3px solid var(--border);
+  background: var(--bg-secondary);
+}
+.verdict-label  { font-size: 13px; font-weight: 700; }
+.verdict-reason { font-size: 11px; color: var(--text-muted); margin-top: 3px; line-height: 1.4; }
+
+.verdict.no      { border-left-color: var(--accent-red);    background: #3b1212; }
+.verdict.no .verdict-label      { color: #f87171; }
+.verdict.caution { border-left-color: var(--accent-yellow); background: #3a2e0b; }
+.verdict.caution .verdict-label { color: #fbbf24; }
+.verdict.ok      { border-left-color: var(--accent-green);  background: #0f2e1c; }
+.verdict.ok .verdict-label      { color: #4ade80; }

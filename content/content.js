@@ -235,6 +235,30 @@
 
   // Check for pop-up / redirect scripts (heuristic: onbeforeunload)
   const hasBeforeUnload = typeof window.onbeforeunload === 'function';
+  // =====================
+  // DEEP CHECK DATA (passive)
+  // =====================
+
+  // Forms containing a password field: how and where do they submit?
+  const passwordForms = forms
+    .filter(f => f.querySelector('input[type="password"]'))
+    .map(f => ({
+      method:         (f.method || 'get').toLowerCase(),
+      actionProtocol: getProtocol(f.action || pageUrl),
+      actionExternal: f.action ? isThirdParty(f.action, pageHost) : false
+    }));
+
+  // Third-party scripts loaded without Subresource Integrity
+  const thirdPartyNoSRI = Array.from(document.querySelectorAll('script[src]'))
+    .filter(s => isThirdParty(s.src, pageHost) && !s.integrity)
+    .length;
+
+  // Session identifiers exposed in the page URL or same-site links
+  const SESSION_IN_URL = /[;?&](jsessionid|phpsessid|sessionid|session_id|sid)=/i;
+  const sessionIdInUrl =
+    SESSION_IN_URL.test(pageUrl) ||
+    links.some(l => !isThirdParty(l, pageHost) && SESSION_IN_URL.test(l));
+
 
   // =====================
   // ASSEMBLE PAYLOAD
@@ -295,6 +319,11 @@
     hasDownloadLinks,
     downloadLinks,
     hasBeforeUnload,
+
+    // Deep checks
+    passwordForms,
+    thirdPartyNoSRI,
+    sessionIdInUrl,
 
     // Links
     externalLinks: externalLinks.slice(0, 50), // cap to avoid huge payloads

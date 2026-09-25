@@ -96,6 +96,37 @@ function getHeadersForPage(tabId, pageUrl) {
 }
 
 // =====================
+// CERTIFICATE ERROR CAPTURE
+// Chrome does not expose certificate details to extensions, but when it blocks
+// a page with a certificate warning, the failed request reports the error code.
+// Stored per hostname in session storage (cleared when the browser closes).
+// =====================
+const CERT_KEY = 'webguard_cert_errors';
+
+chrome.webRequest.onErrorOccurred.addListener(async (details) => {
+  const err = details.error || '';
+  if (!/ERR_CERT_|ERR_SSL_/i.test(err)) return;
+  try {
+    const host = new URL(details.url).hostname;
+    const data = await chrome.storage.session.get(CERT_KEY);
+    const map  = data[CERT_KEY] || {};
+    map[host]  = { error: err, seenAt: Date.now() };
+    await chrome.storage.session.set({ [CERT_KEY]: map });
+  } catch (e) {
+    console.warn('WebGuard: could not record certificate error', e);
+  }
+}, { urls: ['<all_urls>'], types: ['main_frame'] });
+
+async function getCertErrorForHost(host) {
+  try {
+    const data = await chrome.storage.session.get(CERT_KEY);
+    return (data[CERT_KEY] || {})[host] || null;
+  } catch {
+    return null;
+  }
+}
+
+// =====================
 // TRIGGER ANALYSIS
 // =====================
 async function triggerAnalysis(tabId, url) {
@@ -245,8 +276,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // =====================
 async function analyzeAndScore(tabId, pageData) {
   try {
-    // Attach captured response headers (null if not available for this page)
     pageData.responseHeaders = getHeadersForPage(tabId, pageData.url);
+    pageData.certError       = await getCertErrorForHost(pageData.domain);
 
     const result = runRiskEngine(pageData);
 
@@ -257,6 +288,7 @@ async function analyzeAndScore(tabId, pageData) {
       score:      result.score,
       riskLevel:  result.riskLevel,
       riskLabel:  result.riskLabel,
+      verdict:    result.verdict,
       categories: result.categories,
       findings:   result.findings,
       details:    result.details,
