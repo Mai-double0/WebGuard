@@ -1,4 +1,6 @@
 // background/service-worker.js
+// Coordinates tab detection, response-header capture, analysis, and the toolbar badge.
+
 import { runRiskEngine } from '../scoring/risk-engine.js';
 
 const BADGE_COLORS = {
@@ -30,43 +32,91 @@ function updateBadge(tabId, score) {
 }
 
 // =====================
-// SCAN STATE — persists results per tab
+// SCAN STATE PER TAB
 // =====================
 const tabScanState = {};
 
-function setScanState(tabId, state) {
-  tabScanState[tabId] = state;
+function setScanState(tabId, state) { tabScanState[tabId] = state; }
+function getScanState(tabId) { return tabScanState[tabId] || null; }
+
+// =====================
+// RESPONSE HEADER CAPTURE (main document only)
+// Read-only observation — WebGuard never modifies or blocks requests.
+// =====================
+const tabHeaders = {};
+
+// Keep cookie name and flags, drop the value — WebGuard never stores cookie contents.
+function redactCookie(raw) {
+  return String(raw).replace(/^([^=;]*)=[^;]*/, '$1=[redacted]');
 }
 
-function getScanState(tabId) {
-  return tabScanState[tabId] || null;
+function captureHeaders(details) {
+  if (details.tabId < 0) return;
+
+  const headers = {};
+  const setCookies = [];
+
+  for (const h of details.responseHeaders || []) {
+    const name  = (h.name || '').toLowerCase();
+    const value = h.value || '';
+    if (name === 'set-cookie') {
+      value.split('\n').forEach(c => { if (c.trim()) setCookies.push(redactCookie(c.trim())); });
+    } else {
+      headers[name] = value;
+    }
+  }
+
+  tabHeaders[details.tabId] = {
+    url:        details.url,
+    statusCode: details.statusCode,
+    headers,
+    setCookies,
+    capturedAt: Date.now()
+  };
+}
+
+const HEADER_FILTER = { urls: ['<all_urls>'], types: ['main_frame'] };
+try {
+  // 'extraHeaders' is needed in Chrome to see Set-Cookie
+  chrome.webRequest.onHeadersReceived.addListener(captureHeaders, HEADER_FILTER, ['responseHeaders', 'extraHeaders']);
+} catch (err) {
+  // Browsers without 'extraHeaders' (e.g. Firefox) still get the other headers
+  chrome.webRequest.onHeadersReceived.addListener(captureHeaders, HEADER_FILTER, ['responseHeaders']);
+}
+
+// Only use captured headers if they belong to the same site as the analyzed page
+function getHeadersForPage(tabId, pageUrl) {
+  const h = tabHeaders[tabId];
+  if (!h) return null;
+  try {
+    return new URL(h.url).origin === new URL(pageUrl).origin ? h : null;
+  } catch {
+    return null;
+  }
 }
 
 // =====================
-// TRIGGER ANALYSIS — always re-runs on navigation
+// TRIGGER ANALYSIS
 // =====================
 async function triggerAnalysis(tabId, url) {
   if (!url ||
       url.startsWith('chrome://') ||
       url.startsWith('chrome-extension://') ||
-      url === 'about:blank' ||
-      url === '') {
+      url === 'about:blank') {
     chrome.action.setBadgeText({ tabId, text: '' });
     setScanState(tabId, null);
     return;
   }
 
-  // Always reset state on new navigation so popup doesn't show stale data
   setScanState(tabId, { status: 'scanning', url });
   updateBadge(tabId, null);
 
   try {
-    // Force re-injection by using scripting API directly
     await chrome.scripting.executeScript({
       target: { tabId },
       func: () => { delete window.__webguardInjected; }
     });
-  } catch (_) { /* page may not be ready yet — ignore */ }
+  } catch (_) { /* page may not be ready — ignore */ }
 
   try {
     await chrome.scripting.executeScript({
@@ -75,11 +125,9 @@ async function triggerAnalysis(tabId, url) {
     });
   } catch (err) {
     console.warn(`WebGuard: Content script blocked on tab ${tabId}:`, err.message);
-    // Fallback: URL-only analysis
     try {
       const urlObj = new URL(url);
-      const fallbackData = buildFallbackData(url, urlObj);
-      analyzeAndScore(tabId, fallbackData);
+      analyzeAndScore(tabId, buildFallbackData(url, urlObj));
     } catch (parseErr) {
       setScanState(tabId, {
         status: 'error',
@@ -123,6 +171,7 @@ function buildFallbackData(url, urlObj) {
     urlLength:              url.length,
     hasEncodedChars:        url.includes('%'),
     hasDownloadLinks:       false,
+    downloadLinks:          [],
     hasBeforeUnload:        false,
     externalLinks:          [],
     collectedAt:            Date.now(),
@@ -131,25 +180,20 @@ function buildFallbackData(url, urlObj) {
 }
 
 // =====================
-// TAB EVENTS — always re-trigger on navigation
+// TAB EVENTS
 // =====================
-
 chrome.webNavigation.onCompleted.addListener((details) => {
   if (details.frameId !== 0) return;
   triggerAnalysis(details.tabId, details.url);
 });
 
-// Re-trigger when switching tabs so badge is always current
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
   try {
     const tab = await chrome.tabs.get(activeInfo.tabId);
     const state = getScanState(activeInfo.tabId);
-
     if (state && state.status === 'complete') {
-      // Restore badge from cached result
       updateBadge(activeInfo.tabId, state.score);
     } else {
-      // No complete result — trigger fresh analysis
       triggerAnalysis(activeInfo.tabId, tab.url);
     }
   } catch (err) {
@@ -157,8 +201,7 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
   }
 });
 
-// Clear state when tab is updated (URL changed by user)
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.status === 'loading' && changeInfo.url) {
     setScanState(tabId, { status: 'scanning', url: changeInfo.url });
     updateBadge(tabId, null);
@@ -167,6 +210,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   delete tabScanState[tabId];
+  delete tabHeaders[tabId];
 });
 
 // =====================
@@ -183,13 +227,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'GET_SCAN_RESULT') {
-    const state = getScanState(message.tabId);
-    sendResponse({ result: state });
+    sendResponse({ result: getScanState(message.tabId) });
     return true;
   }
 
   if (message.type === 'RESCAN') {
-    // Clear existing state so popup shows scanning immediately
     setScanState(message.tabId, { status: 'scanning', url: message.url });
     triggerAnalysis(message.tabId, message.url);
     sendResponse({ status: 'rescanning' });
@@ -203,9 +245,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // =====================
 async function analyzeAndScore(tabId, pageData) {
   try {
+    // Attach captured response headers (null if not available for this page)
+    pageData.responseHeaders = getHeadersForPage(tabId, pageData.url);
+
     const result = runRiskEngine(pageData);
 
-    const finalResult = {
+    setScanState(tabId, {
       status:     'complete',
       url:        pageData.url,
       domain:     pageData.domain,
@@ -217,9 +262,7 @@ async function analyzeAndScore(tabId, pageData) {
       details:    result.details,
       pageData,
       scannedAt:  Date.now()
-    };
-
-    setScanState(tabId, finalResult);
+    });
     updateBadge(tabId, result.score);
 
   } catch (err) {
