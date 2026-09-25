@@ -245,7 +245,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   delete tabScanState[tabId];
-  chrome.storage.session.remove(HEADERS_KEY(tabId));
+  chrome.storage.session.remove([HEADERS_KEY(tabId), `webguard_result_${tabId}`]);
 });
 
 // =====================
@@ -345,7 +345,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const tabId = message.tabId;
 
   if (message.type === 'GET_SCAN_RESULT') {
-    sendResponse({ result: getScanState(tabId) });
+    const state = getScanState(tabId);
+    // Scan state is in memory and lost when the service worker is stopped;
+    // start a new scan so the caller's next poll finds a result.
+    if (!state) {
+      chrome.tabs.get(tabId)
+        .then(tab => { if (!getScanState(tabId)) triggerAnalysis(tabId, tab.url); })
+        .catch(() => {});
+    }
+    sendResponse({ result: state });
     return;
   }
 
@@ -387,6 +395,8 @@ async function analyzeAndScore(tabId, pageData) {
 
   } catch (err) {
     console.error('WebGuard: Analysis error:', err);
-    setScanState(tabId, { status: 'error', error: err.message });
+    setScanState(tabId, { status: 'error', url: pageData.url, error: err.message });
+    chrome.action.setBadgeText({ tabId, text: '?' });
+    chrome.action.setBadgeBackgroundColor({ tabId, color: BADGE_COLORS['default'] });
   }
 }

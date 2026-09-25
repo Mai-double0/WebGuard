@@ -319,7 +319,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // Rescan button
   el('btn-rescan')?.addEventListener('click', () => {
     chrome.runtime.sendMessage({ type: 'RESCAN', tabId }, () => {
-      setTimeout(() => window.location.reload(), 2500);
+      // Drop the popup's snapshot so the reload shows the new scan
+      chrome.storage.session.remove(`webguard_result_${tabId}`, () => {
+        setTimeout(() => window.location.reload(), 2500);
+      });
     });
   });
 });
