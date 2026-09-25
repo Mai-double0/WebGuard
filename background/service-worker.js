@@ -219,7 +219,7 @@ function buildFallbackData(url, urlObj) {
     hasPunycode:            urlObj.hostname.includes('xn--'),
     hasSuspiciousChars:     /[^a-z0-9\-.]/.test(urlObj.hostname),
     urlLength:              url.length,
-    hasEncodedChars:        url.includes('%'),
+    hasEncodedChars:        url.includes('%') && !url.includes('%20'),  // same rule as content.js
     hasDownloadLinks:       false,
     downloadLinks:          [],
     limitedAnalysis:        true
