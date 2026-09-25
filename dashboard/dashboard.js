@@ -1,5 +1,6 @@
 // dashboard/dashboard.js
 import { generateExplanation } from '../explanation/explanation-engine.js';
+import { getRiskLevel, getRiskColor, getCategoryLevel, getCategoryLabel, createEl } from '../utils/helpers.js';
 
 // =====================
 // UTILITIES
@@ -7,37 +8,6 @@ import { generateExplanation } from '../explanation/explanation-engine.js';
 
 function el(id) { return document.getElementById(id); }
 function setText(id, text) { const e = el(id); if (e) e.textContent = text; }
-
-function sanitize(str) {
-  const div = document.createElement('div');
-  div.textContent = String(str ?? '');
-  return div.innerHTML;
-}
-
-function getRiskLevel(score) {
-  if (score >= 90) return 'very-low';
-  if (score >= 75) return 'low';
-  if (score >= 50) return 'moderate';
-  if (score >= 25) return 'high';
-  return 'critical';
-}
-
-function getCategoryLevel(score, max) {
-  const pct = (score / max) * 100;
-  if (pct >= 90) return 'very-low';
-  if (pct >= 75) return 'low';
-  if (pct >= 50) return 'moderate';
-  if (pct >= 25) return 'high';
-  return 'critical';
-}
-
-function getCategoryLabel(score, max) {
-  const pct = (score / max) * 100;
-  if (pct >= 75) return 'LOW';
-  if (pct >= 50) return 'MODERATE';
-  if (pct >= 25) return 'HIGH';
-  return 'CRITICAL';
-}
 
 function formatTime(ts) {
   if (!ts) return '';
@@ -98,11 +68,7 @@ function renderCategoryCard(name, score, maxScore) {
   const barEl = el(`ov-${name}-bar`);
   if (barEl) {
     barEl.style.width = `${pct}%`;
-    const colors = {
-      'very-low': '#22c55e', 'low': '#22c55e',
-      'moderate': '#eab308', 'high': '#f97316', 'critical': '#ef4444'
-    };
-    barEl.style.background = colors[level] || '#64748b';
+    barEl.style.background = getRiskColor(level);
   }
 }
 
@@ -122,27 +88,24 @@ function renderFindingsList(elementId, findings, explanation) {
   if (!list) return;
 
   if (!findings.length) {
-    list.innerHTML = `<li class="finding-item neutral">
-      <span class="finding-icon">ℹ</span>
-      <div class="finding-body">
-        <div class="finding-text">No findings for this category.</div>
-      </div>
-    </li>`;
+    list.replaceChildren(findingItem('neutral', 'ℹ', 'No findings for this category.'));
     return;
   }
 
-  list.innerHTML = findings.map(f => {
+  list.replaceChildren(...findings.map(f => {
     const expEntry = explanation?.findingDetails?.find(d => d.text === f.text);
-    const expText  = expEntry?.explanation || '';
-    return `
-      <li class="finding-item ${sanitize(f.type || 'neutral')}">
-        <span class="finding-icon">${sanitize(f.icon || 'ℹ')}</span>
-        <div class="finding-body">
-          <div class="finding-text">${sanitize(f.text || '')}</div>
-          ${expText ? `<div class="finding-explanation">${sanitize(expText)}</div>` : ''}
-        </div>
-      </li>`;
-  }).join('');
+    return findingItem(f.type || 'neutral', f.icon || 'ℹ', f.text || '', expEntry?.explanation || '');
+  }));
+}
+
+function findingItem(type, icon, text, explanationText = '') {
+  const body = createEl('div', 'finding-body');
+  body.append(createEl('div', 'finding-text', text));
+  if (explanationText) body.append(createEl('div', 'finding-explanation', explanationText));
+
+  const li = createEl('li', `finding-item ${type}`);
+  li.append(createEl('span', 'finding-icon', icon), body);
+  return li;
 }
 
 function renderSecurityTab(result, explanation) {
@@ -161,9 +124,9 @@ function renderPrivacyTab(result, explanation) {
   const domainList = el('domain-list');
   const domains    = result.pageData?.thirdPartyDomains || [];
   if (domainList) {
-    domainList.innerHTML = domains.length
-      ? domains.map(d => `<span class="domain-tag">${sanitize(d)}</span>`).join('')
-      : '<span class="muted">No third-party domains detected.</span>';
+    domainList.replaceChildren(...(domains.length
+      ? domains.map(d => createEl('span', 'domain-tag', d))
+      : [createEl('span', 'muted', 'No third-party domains detected.')]));
   }
 }
 
@@ -193,25 +156,25 @@ function renderRecommendations(explanation) {
   const recs    = explanation?.recommendations || [];
 
   if (recList) {
-    recList.innerHTML = recs.length
-      ? recs.map(r => `
-          <li class="rec-item ${sanitize(r.priority || 'info')}">
-            <span class="rec-icon">${sanitize(r.icon || 'ℹ')}</span>
-            <span class="rec-text">${sanitize(r.text || '')}</span>
-          </li>`).join('')
-      : '<li class="finding-item neutral"><span class="finding-icon">✓</span><div class="finding-body"><div class="finding-text">No specific recommendations.</div></div></li>';
+    recList.replaceChildren(...(recs.length
+      ? recs.map(r => {
+          const li = createEl('li', `rec-item ${r.priority || 'info'}`);
+          li.append(createEl('span', 'rec-icon', r.icon || 'ℹ'), createEl('span', 'rec-text', r.text || ''));
+          return li;
+        })
+      : [findingItem('neutral', '✓', 'No specific recommendations.')]));
   }
 
   const eduList = el('edu-list');
   const notes   = explanation?.educationalNotes || [];
   if (eduList) {
-    eduList.innerHTML = notes.length
-      ? notes.map(n => `
-          <div class="edu-item">
-            <div class="edu-title">${sanitize(n.title || '')}</div>
-            <div class="edu-text">${sanitize(n.text || '')}</div>
-          </div>`).join('')
-      : '<span class="muted">No additional notes.</span>';
+    eduList.replaceChildren(...(notes.length
+      ? notes.map(n => {
+          const item = createEl('div', 'edu-item');
+          item.append(createEl('div', 'edu-title', n.title || ''), createEl('div', 'edu-text', n.text || ''));
+          return item;
+        })
+      : [createEl('span', 'muted', 'No additional notes.')]));
   }
 }
 
@@ -230,9 +193,7 @@ function renderVerdict(verdict) {
 
   const list = el('verdict-reasons');
   if (list) {
-    list.innerHTML = (verdict.reasons || [])
-      .map(r => `<li>${sanitize(r)}</li>`)
-      .join('');
+    list.replaceChildren(...(verdict.reasons || []).map(r => createEl('li', '', r)));
   }
 }
 
@@ -319,7 +280,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // Rescan button
   el('btn-rescan')?.addEventListener('click', () => {
     chrome.runtime.sendMessage({ type: 'RESCAN', tabId }, () => {
-      setTimeout(() => window.location.reload(), 2500);
+      // Drop the popup's snapshot so the reload shows the new scan
+      chrome.storage.session.remove(`webguard_result_${tabId}`, () => {
+        setTimeout(() => window.location.reload(), 2500);
+      });
     });
   });
 });

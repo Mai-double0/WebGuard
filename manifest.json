@@ -47,13 +47,6 @@
   ],
 
   "content_security_policy": {
-    "extension_pages": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self';"
-  },
-
-  "web_accessible_resources": [
-    {
-      "resources": ["dashboard/dashboard.html"],
-      "matches": ["<all_urls>"]
-    }
-  ]
+    "extension_pages": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none';"
+  }
 }

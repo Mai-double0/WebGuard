@@ -40,20 +40,46 @@ const LIBRARIES = [
     vulnerable: v => versionLessThan(v, '4.17.21'),
     note: 'versions before 4.17.21 have known injection / prototype-pollution flaws (CVE-2021-23337)'
   }
-];
+].map(lib => ({
+  ...lib,
+  pattern: new RegExp(`${lib.slug}(?:\\.min)?(?:\\.js)?(?:\\?ver)?[/@=.-]?v?(\\d+\\.\\d+\\.\\d+)`, 'i')
+}));
 
 function findVulnerableLibraries(scripts) {
   const hits = new Map();
   for (const src of scripts || []) {
     for (const lib of LIBRARIES) {
-      const re = new RegExp(`${lib.slug}(?:\\.min)?(?:\\.js)?(?:\\?ver)?[/@=.-]?v?(\\d+\\.\\d+\\.\\d+)`, 'i');
-      const m = src.match(re);
+      const m = src.match(lib.pattern);
       if (m && lib.vulnerable(m[1]) && !hits.has(lib.name)) {
         hits.set(lib.name, { name: lib.name, version: m[1], note: lib.note });
       }
     }
   }
   return [...hits.values()];
+}
+
+// A CSP header can hold several policies separated by ',' (e.g. two CSP
+// headers combined); each policy is a list of ';'-separated directives.
+// Returns, per policy, the source list that governs <script> elements, using
+// the browser's fallback order: script-src-elem, then script-src, then
+// default-src. The first occurrence of a directive wins.
+function scriptSourcesPerPolicy(csp) {
+  return csp.split(',').map(policy => {
+    const directives = new Map();
+    for (const part of policy.split(';')) {
+      const [name, ...sources] = part.trim().toLowerCase().split(/\s+/);
+      if (name && !directives.has(name)) directives.set(name, sources.join(' '));
+    }
+    return directives.get('script-src-elem') ?? directives.get('script-src') ?? directives.get('default-src');
+  }).filter(sources => sources !== undefined);
+}
+
+// Inline scripts are allowed only if every policy that restricts scripts allows them
+function allowsUnsafeInline(csp) {
+  const policies = scriptSourcesPerPolicy(csp);
+  return policies.length > 0 && policies.every(sources =>
+    sources.includes("'unsafe-inline'") &&
+    !/'nonce-|'sha(256|384|512)-|'strict-dynamic'/.test(sources));
 }
 
 export function runDeepChecks(pageData, isHttps) {
@@ -114,20 +140,16 @@ export function runDeepChecks(pageData, isHttps) {
 
   // 5. Weak Content-Security-Policy
   const csp = headers?.['content-security-policy'] || '';
-  if (csp) {
-    const scriptSrc = (csp.match(/script-src[^;]*/i) || csp.match(/default-src[^;]*/i) || [''])[0];
-    const hasNonceOrHash = /'nonce-|'sha(256|384|512)-|'strict-dynamic'/i.test(scriptSrc);
-    if (/'unsafe-inline'/i.test(scriptSrc) && !hasNonceOrHash) {
-      penalty += 1;
-      add('warning', '⚠',
-        "Content-Security-Policy allows inline scripts ('unsafe-inline'), which removes most of its protection against XSS.");
-    }
+  if (csp && allowsUnsafeInline(csp)) {
+    penalty += 1;
+    add('warning', '⚠',
+      "Content-Security-Policy allows inline scripts ('unsafe-inline'), which removes most of its protection against XSS.");
   }
 
   // 6. HSTS strength
   const hsts = headers?.['strict-transport-security'];
   if (hsts) {
-    const m = hsts.match(/max-age=(\d+)/i);
+    const m = hsts.match(/max-age\s*=\s*"?(\d+)/i);  // value may be quoted
     if (m && Number(m[1]) < 15552000) {
       add('neutral', 'ℹ',
         `HSTS max-age is short (${Math.round(Number(m[1]) / 86400)} days) — at least 180 days is recommended.`);

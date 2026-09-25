@@ -2,43 +2,7 @@
 // Wires the popup UI to the background service worker.
 // Fetches scan result for the current tab and renders it.
 
-// =====================
-// RISK LEVEL HELPERS
-// =====================
-
-function getRiskLevel(score) {
-  if (score >= 90) return 'very-low';
-  if (score >= 75) return 'low';
-  if (score >= 50) return 'moderate';
-  if (score >= 25) return 'high';
-  return 'critical';
-}
-
-function getRiskLabel(score) {
-  if (score >= 90) return 'VERY LOW RISK';
-  if (score >= 75) return 'LOW RISK';
-  if (score >= 50) return 'MODERATE RISK';
-  if (score >= 25) return 'HIGH RISK';
-  return 'CRITICAL RISK';
-}
-
-function getCategoryLevel(score, max) {
-  const pct = (score / max) * 100;
-  if (pct >= 90) return 'very-low';
-  if (pct >= 75) return 'low';
-  if (pct >= 50) return 'moderate';
-  if (pct >= 25) return 'high';
-  return 'critical';
-}
-
-function getCategoryLabel(score, max) {
-  const pct = (score / max) * 100;
-  if (pct >= 90) return 'LOW';
-  if (pct >= 75) return 'LOW';
-  if (pct >= 50) return 'MODERATE';
-  if (pct >= 25) return 'HIGH';
-  return 'CRITICAL';
-}
+import { getCategoryLevel, getCategoryLabel, isAnalyzableUrl, createEl } from '../utils/helpers.js';
 
 // =====================
 // DOM HELPERS
@@ -53,9 +17,10 @@ function setText(id, text) {
   if (e) e.textContent = text;
 }
 
-function setClass(id, className) {
-  const e = el(id);
-  if (e) e.className = className;
+function findingItem(type, icon, text) {
+  const li = createEl('li', `finding-item ${type}`);
+  li.append(createEl('span', 'finding-icon', icon), createEl('span', 'finding-text', text));
+  return li;
 }
 
 // =====================
@@ -78,12 +43,7 @@ function renderScanning() {
   setText('cat-resources', '--');
   setText('cat-resources-level', '--');
 
-  const list = el('findings-list');
-  list.innerHTML = `
-    <li class="finding-item neutral">
-      <span class="finding-icon">⏳</span>
-      <span class="finding-text">Analysis in progress...</span>
-    </li>`;
+  el('findings-list').replaceChildren(findingItem('neutral', '⏳', 'Analysis in progress...'));
 
     renderVerdict(null);
 }
@@ -95,12 +55,7 @@ function renderError(message) {
   setText('risk-label', 'UNAVAILABLE');
   el('risk-badge').className = 'risk-badge';
 
-  const list = el('findings-list');
-  list.innerHTML = `
-    <li class="finding-item neutral">
-      <span class="finding-icon">ℹ</span>
-      <span class="finding-text">${sanitize(message || 'Page could not be analyzed.')}</span>
-    </li>`;
+  el('findings-list').replaceChildren(findingItem('neutral', 'ℹ', message || 'Page could not be analyzed.'));
 
     renderVerdict(null);
 }
@@ -123,11 +78,8 @@ function renderResult(result) {
   setText('risk-label', riskLabel);
   renderVerdict(result.verdict);
 
-  // Show limited analysis note if applicable
-  const noteEl = document.getElementById('limited-note');
-  if (result.pageData?.limitedAnalysis && noteEl) {
-  noteEl.classList.remove('hidden');
-  }
+  // Show limited analysis note if applicable (and hide it again after a full rescan)
+  el('limited-note')?.classList.toggle('hidden', !result.pageData?.limitedAnalysis);
 
   // Category scores
   if (categories) {
@@ -185,33 +137,13 @@ function renderVerdict(verdict) {
 function renderFindings(findings) {
   const list = el('findings-list');
   if (!findings.length) {
-    list.innerHTML = `
-      <li class="finding-item neutral">
-        <span class="finding-icon">ℹ</span>
-        <span class="finding-text">No significant findings.</span>
-      </li>`;
+    list.replaceChildren(findingItem('neutral', 'ℹ', 'No significant findings.'));
     return;
   }
 
   // Show max 6 findings in popup (full list in dashboard)
-  const shown = findings.slice(0, 6);
-  list.innerHTML = shown.map(f => `
-    <li class="finding-item ${sanitize(f.type || 'neutral')}">
-      <span class="finding-icon">${sanitize(f.icon || 'ℹ')}</span>
-      <span class="finding-text">${sanitize(f.text || '')}</span>
-    </li>
-  `).join('');
-}
-
-// =====================
-// SANITIZER
-// Prevent XSS — all dynamic text must go through this
-// =====================
-
-function sanitize(str) {
-  const div = document.createElement('div');
-  div.textContent = String(str);
-  return div.innerHTML;
+  list.replaceChildren(...findings.slice(0, 6).map(f =>
+    findingItem(f.type || 'neutral', f.icon || 'ℹ', f.text || '')));
 }
 
 // =====================
@@ -219,19 +151,17 @@ function sanitize(str) {
 // =====================
 
 function openDashboard(tabId, result) {
-  if (result && result.status === 'complete') {
-    // Store result in chrome.storage.session so dashboard can retrieve it
-    chrome.storage.session.set({ [`webguard_result_${tabId}`]: result }, () => {
-      const params = new URLSearchParams({ tabId: String(tabId) });
-      chrome.tabs.create({
-        url: chrome.runtime.getURL(`dashboard/dashboard.html?${params}`)
-      });
-    });
-  } else {
+  const open = () => {
     const params = new URLSearchParams({ tabId: String(tabId) });
     chrome.tabs.create({
       url: chrome.runtime.getURL(`dashboard/dashboard.html?${params}`)
     });
+  };
+  if (result && result.status === 'complete') {
+    // Store result in chrome.storage.session so dashboard can retrieve it
+    chrome.storage.session.set({ [`webguard_result_${tabId}`]: result }, open);
+  } else {
+    open();
   }
 }
 
@@ -252,12 +182,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const tabUrl = tab.url || '';
 
   // Skip non-analyzable pages
-  if (
-    tabUrl.startsWith('chrome://') ||
-    tabUrl.startsWith('chrome-extension://') ||
-    tabUrl === 'about:blank' ||
-    tabUrl === ''
-  ) {
+  if (!isAnalyzableUrl(tabUrl)) {
     renderError('WebGuard cannot analyze browser internal pages.');
     return;
   }
@@ -321,7 +246,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setText('site-url', tabUrl);
 
     chrome.runtime.sendMessage(
-      { type: 'RESCAN', tabId, url: tabUrl },
+      { type: 'RESCAN', tabId },
       () => {
         // Poll for result after rescan
         setTimeout(() => {

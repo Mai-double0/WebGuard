@@ -135,7 +135,7 @@ webguard/
 ├── storage/
 │   └── storage.js              # Local scan-history module (not yet wired in)
 ├── utils/
-│   └── helpers.js              # Shared helpers
+│   └── helpers.js              # Shared risk-level, colour, URL, and DOM helpers
 └── icons/
 ```
 
@@ -159,11 +159,13 @@ Tested on Google Chrome. Microsoft Edge (Chromium) should work with the same bui
 ## 🔒 Privacy & security of WebGuard itself
 
 - **All analysis is local.** No browsing data is sent to any server.
-- **Cookie values are never stored.** Only cookie names and flags are kept; values are redacted at capture.
-- Captured headers and certificate errors live in `chrome.storage.session`, which is cleared when the browser closes.
+- **Cookie values are never stored.** Set-Cookie headers are reduced to the cookie name and its `Secure` / `HttpOnly` flags at capture.
+- **Minimal data.** Only the seven security headers the analyzers read are kept, with the response origin instead of its full URL. The content script sends counts, flags, and resource URLs. It never reads form values, meta-tag contents, or link lists.
+- Captured headers and certificate errors live in `chrome.storage.session`, which is cleared when the browser closes. Per-tab data is removed when the tab closes.
 - **Passive only.** WebGuard never sends extra requests to, or probes, the sites you visit.
-- Strict Content Security Policy on all extension pages, with no inline scripts and no `eval()`.
-- All dynamic text is sanitized before it reaches the DOM.
+- Strict Content Security Policy on all extension pages, with no inline scripts and no `eval()`. No extension page is web-accessible, so websites cannot frame or detect the dashboard.
+- Dynamic text is rendered only with `textContent`; the UI never uses `innerHTML`.
+- Messages from content scripts are treated as untrusted: the service worker checks the sender and rebuilds the page data with the expected types. Only extension pages can read results or trigger a rescan.
 
 ---
 

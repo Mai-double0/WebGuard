@@ -6,27 +6,12 @@ import { analyzeSecurity }  from '../analyzers/security.js';
 import { analyzePrivacy }   from '../analyzers/privacy.js';
 import { analyzePhishing }  from '../analyzers/phishing.js';
 import { analyzeResources } from '../analyzers/resources.js';
+import { getRiskLevel, getRiskLabel } from '../utils/helpers.js';
 
 // Weights (sum = 100): Security 35, Privacy 25, Phishing 25, Resources 15
 const CEILING      = 95;  // passive analysis can't rule out server-side flaws
 const COVERAGE_CAP = 85;  // some checks could not run
 const BLOCKER_CAP  = 49;  // a concrete reason not to trust the page
-
-export function getRiskLevel(score) {
-  if (score >= 90) return 'very-low';
-  if (score >= 75) return 'low';
-  if (score >= 50) return 'moderate';
-  if (score >= 25) return 'high';
-  return 'critical';
-}
-
-export function getRiskLabel(score) {
-  if (score >= 90) return 'VERY LOW RISK';
-  if (score >= 75) return 'LOW RISK';
-  if (score >= 50) return 'MODERATE RISK';
-  if (score >= 25) return 'HIGH RISK';
-  return 'CRITICAL RISK';
-}
 
 function buildVerdict(findings, score, coverageLimited, securityPct) {
   const blockers = findings.filter(f => f.blocker).map(f => f.text);

@@ -95,8 +95,6 @@
     .map(a => a.href)
     .filter(Boolean);
 
-  const externalLinks = links.filter(l => isThirdParty(l, pageHost));
-
   // =====================
   // ALL THIRD-PARTY DOMAINS
   // =====================
@@ -155,26 +153,36 @@
 
   const forms = Array.from(document.querySelectorAll('form'));
 
+  // A form exposes its named controls as properties, so <input name="action">
+  // or <input name="method"> replaces form.action / form.method, and can even
+  // replace form.getAttribute. Read forms through the Element prototype.
+  const formAttr = (f, name) => Element.prototype.getAttribute.call(f, name);
+  const formHas  = (f, selector) => Element.prototype.querySelector.call(f, selector) !== null;
+
+  // Same result as form.action: the document URL when the attribute is empty
+  function formAction(f) {
+    const attr = formAttr(f, 'action');
+    if (!attr) return pageUrl;
+    try { return new URL(attr, document.baseURI).href; } catch { return pageUrl; }
+  }
+
+  // Same result as form.method: invalid or missing values mean GET
+  function formMethod(f) {
+    const m = (formAttr(f, 'method') || '').toLowerCase();
+    return m === 'post' || m === 'dialog' ? m : 'get';
+  }
+
   const hasPasswordField = document.querySelector('input[type="password"]') !== null;
-  const hasEmailField    = document.querySelector('input[type="email"]')    !== null;
   const hasCreditCard    = Array.from(document.querySelectorAll('input'))
     .some(i => /card|credit|cvv|cvc|expir/i.test(i.name + i.id + i.placeholder));
 
-  const formActions = forms.map(f => f.action).filter(Boolean);
+  const formActions = forms.map(formAction);
   const externalFormActions = formActions.filter(a => isThirdParty(a, pageHost));
 
   // =====================
-  // META TAGS
+  // CSP VIA META TAG
   // =====================
 
-  const metaTags = {};
-  document.querySelectorAll('meta').forEach(m => {
-    const name = m.getAttribute('name') || m.getAttribute('property') || m.getAttribute('http-equiv');
-    const content = m.getAttribute('content');
-    if (name && content) metaTags[name.toLowerCase()] = content;
-  });
-
-  // CSP via meta tag
   const hasMetaCSP = !!document.querySelector(
     'meta[http-equiv="Content-Security-Policy"]'
   );
@@ -233,19 +241,17 @@
 
   const hasDownloadLinks = downloadLinks.length > 0;
 
-  // Check for pop-up / redirect scripts (heuristic: onbeforeunload)
-  const hasBeforeUnload = typeof window.onbeforeunload === 'function';
   // =====================
   // DEEP CHECK DATA (passive)
   // =====================
 
   // Forms containing a password field: how and where do they submit?
   const passwordForms = forms
-    .filter(f => f.querySelector('input[type="password"]'))
+    .filter(f => formHas(f, 'input[type="password"]'))
     .map(f => ({
-      method:         (f.method || 'get').toLowerCase(),
-      actionProtocol: getProtocol(f.action || pageUrl),
-      actionExternal: f.action ? isThirdParty(f.action, pageHost) : false
+      method:         formMethod(f),
+      actionProtocol: getProtocol(formAction(f)),
+      actionExternal: isThirdParty(formAction(f), pageHost)
     }));
 
   // Third-party scripts loaded without Subresource Integrity
@@ -262,6 +268,8 @@
 
   // =====================
   // ASSEMBLE PAYLOAD
+  // Only what the analyzers use. Meta tag contents, link lists and other
+  // page text are not collected (meta tags often hold CSRF tokens).
   // =====================
 
   const pageData = {
@@ -273,9 +281,6 @@
     // Scripts
     scripts,
     thirdPartyScripts,
-
-    // Stylesheets
-    stylesheets,
 
     // Iframes
     iframes,
@@ -295,13 +300,10 @@
 
     // Forms
     hasPasswordField,
-    hasEmailField,
     hasCreditCard,
     externalFormActions,
-    formCount: forms.length,
 
-    // Meta
-    metaTags,
+    // CSP
     hasMetaCSP,
 
     // Mixed content
@@ -318,18 +320,11 @@
     // Behavior
     hasDownloadLinks,
     downloadLinks,
-    hasBeforeUnload,
 
     // Deep checks
     passwordForms,
     thirdPartyNoSRI,
-    sessionIdInUrl,
-
-    // Links
-    externalLinks: externalLinks.slice(0, 50), // cap to avoid huge payloads
-
-    // Timestamp
-    collectedAt: Date.now()
+    sessionIdInUrl
   };
 
   // =====================
@@ -339,7 +334,9 @@
   chrome.runtime.sendMessage({
     type: 'PAGE_DATA_COLLECTED',
     data: pageData
-  }, (response) => {
+  }, () => {
+    // A rejected page (e.g. one that is not a tab's top frame) is answered with
+    // { status: 'ignored' }, which is expected and needs no warning.
     if (chrome.runtime.lastError) {
       // Extension context may have reloaded — safe to ignore
       console.warn('WebGuard content script:', chrome.runtime.lastError.message);

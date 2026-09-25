@@ -2,33 +2,16 @@
 // Coordinates tab detection, response-header capture, analysis, and the toolbar badge.
 
 import { runRiskEngine } from '../scoring/risk-engine.js';
-
-const BADGE_COLORS = {
-  'very-low': '#22c55e',
-  'low':      '#22c55e',
-  'moderate': '#eab308',
-  'high':     '#f97316',
-  'critical': '#ef4444',
-  'default':  '#64748b'
-};
-
-function getRiskLevel(score) {
-  if (score >= 90) return 'very-low';
-  if (score >= 75) return 'low';
-  if (score >= 50) return 'moderate';
-  if (score >= 25) return 'high';
-  return 'critical';
-}
+import { getRiskLevel, getRiskColor, isAnalyzableUrl } from '../utils/helpers.js';
 
 function updateBadge(tabId, score) {
   if (score === null || score === undefined) {
     chrome.action.setBadgeText({ tabId, text: '...' });
-    chrome.action.setBadgeBackgroundColor({ tabId, color: BADGE_COLORS['default'] });
+    chrome.action.setBadgeBackgroundColor({ tabId, color: getRiskColor() });
     return;
   }
-  const level = getRiskLevel(score);
   chrome.action.setBadgeText({ tabId, text: String(score) });
-  chrome.action.setBadgeBackgroundColor({ tabId, color: BADGE_COLORS[level] });
+  chrome.action.setBadgeBackgroundColor({ tabId, color: getRiskColor(getRiskLevel(score)) });
 }
 
 // =====================
@@ -47,33 +30,52 @@ function getScanState(tabId) { return tabScanState[tabId] || null; }
 // going to sleep. Cleared automatically when the browser closes.
 const HEADERS_KEY = (tabId) => `webguard_headers_${tabId}`;
 
-// Keep cookie name and flags, drop the value — WebGuard never stores cookie contents.
-function redactCookie(raw) {
-  return String(raw).replace(/^([^=;]*)=[^;]*/, '$1=[redacted]');
+// Only the headers the analyzers read are kept; anything else (e.g. tokens in
+// custom headers) is never stored.
+const KEPT_HEADERS = new Set([
+  'content-security-policy', 'strict-transport-security', 'x-frame-options',
+  'x-content-type-options', 'referrer-policy', 'server', 'x-powered-by'
+]);
+
+// Keep cookie name and flags only — WebGuard never stores cookie values.
+// A Set-Cookie without '=' in its first part is a nameless cookie whose value is that part.
+function parseCookie(raw) {
+  const [first, ...attrs] = raw.split(';');
+  const eq = first.indexOf('=');
+  const flags = attrs.map(a => a.split('=')[0].trim().toLowerCase());
+  return {
+    name:     eq >= 0 ? first.slice(0, eq).trim() : '',
+    secure:   flags.includes('secure'),
+    httpOnly: flags.includes('httponly')
+  };
 }
 
 function captureHeaders(details) {
   if (details.tabId < 0) return;
 
   const headers = {};
-  const setCookies = [];
+  const cookies = [];
 
   for (const h of details.responseHeaders || []) {
     const name  = (h.name || '').toLowerCase();
     const value = h.value || '';
     if (name === 'set-cookie') {
-      value.split('\n').forEach(c => { if (c.trim()) setCookies.push(redactCookie(c.trim())); });
-    } else {
-      headers[name] = value;
+      value.split('\n').forEach(c => { if (c.trim()) cookies.push(parseCookie(c.trim())); });
+    } else if (KEPT_HEADERS.has(name)) {
+      // Repeated headers are combined as HTTP defines (e.g. two CSP policies)
+      headers[name] = name in headers ? `${headers[name]}, ${value}` : value;
     }
   }
 
+  let origin;
+  try { origin = new URL(details.url).origin; } catch { return; }
+
   chrome.storage.session.set({
     [HEADERS_KEY(details.tabId)]: {
-      url:        details.url,
+      origin,
       statusCode: details.statusCode,
       headers,
-      setCookies,
+      cookies,
       capturedAt: Date.now()
     }
   }).catch(err => console.warn('WebGuard: could not store headers', err));
@@ -93,7 +95,7 @@ async function getHeadersForPage(tabId, pageUrl) {
     const data = await chrome.storage.session.get(key);
     const h    = data[key];
     if (!h) return null;
-    return new URL(h.url).origin === new URL(pageUrl).origin ? h : null;
+    return h.origin === new URL(pageUrl).origin ? h : null;
   } catch {
     return null;
   }
@@ -134,10 +136,7 @@ async function getCertErrorForHost(host) {
 // TRIGGER ANALYSIS
 // =====================
 async function triggerAnalysis(tabId, url) {
-  if (!url ||
-      url.startsWith('chrome://') ||
-      url.startsWith('chrome-extension://') ||
-      url === 'about:blank') {
+  if (!isAnalyzableUrl(url)) {
     chrome.action.setBadgeText({ tabId, text: '' });
     setScanState(tabId, null);
     return;
@@ -170,7 +169,7 @@ async function triggerAnalysis(tabId, url) {
         error: 'Page could not be analyzed (blocked by site security policy).'
       });
       chrome.action.setBadgeText({ tabId, text: '?' });
-      chrome.action.setBadgeBackgroundColor({ tabId, color: BADGE_COLORS['default'] });
+      chrome.action.setBadgeBackgroundColor({ tabId, color: getRiskColor() });
     }
   }
 }
@@ -182,7 +181,6 @@ function buildFallbackData(url, urlObj) {
     protocol:               urlObj.protocol,
     scripts:                [],
     thirdPartyScripts:      [],
-    stylesheets:            [],
     iframes:                [],
     thirdPartyIframes:      [],
     hiddenIframes:          [],
@@ -192,11 +190,8 @@ function buildFallbackData(url, urlObj) {
     adResources:            [],
     analyticsResources:     [],
     hasPasswordField:       false,
-    hasEmailField:          false,
     hasCreditCard:          false,
     externalFormActions:    [],
-    formCount:              0,
-    metaTags:               {},
     hasMetaCSP:             false,
     mixedContentIndicators: [],
     subdomainCount:         urlObj.hostname.split('.').length - 2,
@@ -204,12 +199,9 @@ function buildFallbackData(url, urlObj) {
     hasPunycode:            urlObj.hostname.includes('xn--'),
     hasSuspiciousChars:     /[^a-z0-9\-.]/.test(urlObj.hostname),
     urlLength:              url.length,
-    hasEncodedChars:        url.includes('%'),
+    hasEncodedChars:        url.includes('%') && !url.includes('%20'),  // same rule as content.js
     hasDownloadLinks:       false,
     downloadLinks:          [],
-    hasBeforeUnload:        false,
-    externalLinks:          [],
-    collectedAt:            Date.now(),
     limitedAnalysis:        true
   };
 }
@@ -245,34 +237,134 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   delete tabScanState[tabId];
-  chrome.storage.session.remove(HEADERS_KEY(tabId));
+  chrome.storage.session.remove([HEADERS_KEY(tabId), `webguard_result_${tabId}`]);
 });
+
+// =====================
+// MESSAGE VALIDATION
+// Content scripts run inside web pages, so their messages are treated as
+// untrusted input: only the fields the analyzers read are kept, each with
+// the expected type. Scan results and rescans are only for extension pages.
+// =====================
+const isString  = v => typeof v === 'string';
+const optString = v => (isString(v) ? v : null);
+const strings   = v => (Array.isArray(v) ? v.filter(isString) : []);
+const objects   = (v, pick) => (Array.isArray(v) ? v.filter(o => o && typeof o === 'object').map(pick) : []);
+const count     = v => (Number.isFinite(v) ? v : 0);
+
+const frame = f => ({ src: optString(f.src), sandbox: optString(f.sandbox), hidden: f.hidden === true });
+
+function isExtensionPage(sender) {
+  return sender.id === chrome.runtime.id &&
+         isString(sender.url) && sender.url.startsWith(chrome.runtime.getURL(''));
+}
+
+function isOwnContentScript(sender) {
+  return sender.id === chrome.runtime.id &&
+         Number.isInteger(sender.tab?.id) && sender.frameId === 0;
+}
+
+// Returns clean page data, or null if the message does not describe the sender's page.
+function normalizePageData(raw, sender) {
+  if (!raw || typeof raw !== 'object' || !isString(raw.url)) return null;
+  let url;
+  try {
+    url = new URL(raw.url);
+    if (url.origin !== new URL(sender.url).origin) return null;
+  } catch {
+    return null;
+  }
+
+  return {
+    url:                    raw.url,
+    domain:                 url.hostname,
+    protocol:               url.protocol,
+    scripts:                strings(raw.scripts),
+    thirdPartyScripts:      strings(raw.thirdPartyScripts),
+    iframes:                objects(raw.iframes, frame),
+    thirdPartyIframes:      objects(raw.thirdPartyIframes, frame),
+    hiddenIframes:          objects(raw.hiddenIframes, frame),
+    thirdPartyImages:       strings(raw.thirdPartyImages),
+    thirdPartyDomains:      strings(raw.thirdPartyDomains),
+    trackingResources:      strings(raw.trackingResources),
+    adResources:            strings(raw.adResources),
+    analyticsResources:     strings(raw.analyticsResources),
+    hasPasswordField:       raw.hasPasswordField === true,
+    hasCreditCard:          raw.hasCreditCard === true,
+    externalFormActions:    strings(raw.externalFormActions),
+    hasMetaCSP:             raw.hasMetaCSP === true,
+    mixedContentIndicators: strings(raw.mixedContentIndicators),
+    subdomainCount:         count(raw.subdomainCount),
+    hasIPAddress:           raw.hasIPAddress === true,
+    hasPunycode:            raw.hasPunycode === true,
+    hasSuspiciousChars:     raw.hasSuspiciousChars === true,
+    urlLength:              count(raw.urlLength),
+    hasEncodedChars:        raw.hasEncodedChars === true,
+    hasDownloadLinks:       raw.hasDownloadLinks === true,
+    downloadLinks:          objects(raw.downloadLinks, d => ({
+      host:      optString(d.host),
+      protocol:  optString(d.protocol),
+      sameSite:  d.sameSite === true,
+      isIP:      d.isIP === true,
+      doubleExt: d.doubleExt === true
+    })),
+    passwordForms:          objects(raw.passwordForms, f => ({
+      method:         isString(f.method) ? f.method : 'get',
+      actionProtocol: optString(f.actionProtocol),
+      actionExternal: f.actionExternal === true
+    })),
+    thirdPartyNoSRI:        count(raw.thirdPartyNoSRI),
+    sessionIdInUrl:         raw.sessionIdInUrl === true
+  };
+}
 
 // =====================
 // MESSAGE HANDLER
 // =====================
+// Every path replies, including rejected and unknown messages: a sender whose
+// message gets no reply sees "The message port closed before a response was
+// received." as chrome.runtime.lastError.
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  const ignore = (reason) => sendResponse({ status: 'ignored', reason });
+
+  if (!message || typeof message !== 'object') { ignore('malformed-message'); return; }
 
   if (message.type === 'PAGE_DATA_COLLECTED') {
-    const tabId = sender.tab?.id;
-    if (!tabId) { sendResponse({ status: 'no-tab' }); return true; }
-    analyzeAndScore(tabId, message.data);
+    if (!isOwnContentScript(sender)) { ignore('not-a-tab-top-frame'); return; }
+    const pageData = normalizePageData(message.data, sender);
+    if (!pageData) { ignore('invalid-page-data'); return; }
+    analyzeAndScore(sender.tab.id, pageData);
     sendResponse({ status: 'received' });
-    return true;
+    return;
   }
 
+  if (!isExtensionPage(sender))         { ignore('untrusted-sender'); return; }
+  if (!Number.isInteger(message.tabId)) { ignore('invalid-tab-id'); return; }
+  const tabId = message.tabId;
+
   if (message.type === 'GET_SCAN_RESULT') {
-    sendResponse({ result: getScanState(message.tabId) });
-    return true;
+    const state = getScanState(tabId);
+    // Scan state is in memory and lost when the service worker is stopped;
+    // start a new scan so the caller's next poll finds a result.
+    if (!state) {
+      chrome.tabs.get(tabId)
+        .then(tab => { if (!getScanState(tabId)) triggerAnalysis(tabId, tab.url); })
+        .catch(() => {});
+    }
+    sendResponse({ result: state });
+    return;
   }
 
   if (message.type === 'RESCAN') {
-    setScanState(message.tabId, { status: 'scanning', url: message.url });
-    triggerAnalysis(message.tabId, message.url);
+    // Use the tab's real URL rather than one supplied in the message
+    chrome.tabs.get(tabId)
+      .then(tab => triggerAnalysis(tabId, tab.url))
+      .catch(err => console.warn('WebGuard: rescan failed:', err.message));
     sendResponse({ status: 'rescanning' });
-    return true;
+    return;
   }
 
+  ignore('unknown-type');
 });
 
 // =====================
@@ -303,6 +395,8 @@ async function analyzeAndScore(tabId, pageData) {
 
   } catch (err) {
     console.error('WebGuard: Analysis error:', err);
-    setScanState(tabId, { status: 'error', error: err.message });
+    setScanState(tabId, { status: 'error', url: pageData.url, error: err.message });
+    chrome.action.setBadgeText({ tabId, text: '?' });
+    chrome.action.setBadgeBackgroundColor({ tabId, color: getRiskColor() });
   }
 }

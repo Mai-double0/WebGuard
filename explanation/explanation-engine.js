@@ -8,11 +8,10 @@
 // =====================
 
 export function generateExplanation(result) {
-  const { score, riskLevel, riskLabel, categories, findings, pageData } = result;
+  const { score, riskLevel, riskLabel, findings, pageData } = result;
 
   return {
     summary:          generateSummary(score, riskLevel, riskLabel, pageData),
-    scoreBreakdown:   generateScoreBreakdown(categories),
     findingDetails:   generateFindingDetails(findings),
     recommendations:  generateRecommendations(result),
     educationalNotes: generateEducationalNotes(result)
@@ -41,63 +40,6 @@ function generateSummary(score, riskLevel, riskLabel, pageData) {
     riskLabel,
     disclaimer: 'This is a heuristic risk assessment based on observable indicators. It does not guarantee the site is safe or unsafe.'
   };
-}
-
-// =====================
-// SCORE BREAKDOWN
-// =====================
-
-function generateScoreBreakdown(categories) {
-  if (!categories) return [];
-
-  const categoryInfo = {
-    security: {
-      label:       'Security',
-      icon:        '🔐',
-      description: 'Evaluates HTTPS usage, security headers, mixed content, suspicious downloads, and form security.'
-    },
-    privacy: {
-      label:       'Privacy',
-      icon:        '🕵️',
-      description: 'Evaluates third-party domains, tracking resources, advertising scripts, and analytics services.'
-    },
-    phishing: {
-      label:       'Phishing',
-      icon:        '🎣',
-      description: 'Evaluates URL structure, domain characteristics, login forms, and phishing-related indicators.'
-    },
-    resources: {
-      label:       'Resources',
-      icon:        '🌐',
-      description: 'Evaluates third-party scripts, iframes, mixed content, and overall resource complexity.'
-    }
-  };
-
-  return Object.entries(categories).map(([key, val]) => {
-    const info  = categoryInfo[key] || { label: key, icon: 'ℹ', description: '' };
-    const pct   = Math.round((val.score / val.maxScore) * 100);
-    const level = getLevel(pct);
-
-    return {
-      key,
-      label:       info.label,
-      icon:        info.icon,
-      score:       val.score,
-      maxScore:    val.maxScore,
-      percentage:  pct,
-      level,
-      description: info.description,
-      interpretation: getCategoryInterpretation(key, pct)
-    };
-  });
-}
-
-function getCategoryInterpretation(category, pct) {
-  if (pct >= 90) return 'No significant issues detected in this category.';
-  if (pct >= 75) return 'Minor issues detected — generally acceptable.';
-  if (pct >= 50) return 'Moderate issues detected — review findings.';
-  if (pct >= 25) return 'Significant issues detected — exercise caution.';
-  return 'Critical issues detected in this category.';
 }
 
 // =====================
@@ -330,16 +272,4 @@ function generateEducationalNotes(result) {
   }
 
   return notes;
-}
-
-// =====================
-// UTILITY
-// =====================
-
-function getLevel(pct) {
-  if (pct >= 90) return 'very-low';
-  if (pct >= 75) return 'low';
-  if (pct >= 50) return 'moderate';
-  if (pct >= 25) return 'high';
-  return 'critical';
 }
