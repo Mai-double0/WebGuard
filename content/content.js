@@ -211,8 +211,26 @@
   // PAGE BEHAVIOR
   // =====================
 
-  // Check for suspicious download links
-  const downloadLinks = Array.from(document.querySelectorAll('a[download], a[href$=".exe"], a[href$=".dmg"], a[href$=".msi"], a[href$=".bat"], a[href$=".sh"]'));
+  // Executable download links — collect details so the analyzer can judge context
+  const EXEC_EXT = /\.(exe|msi|dmg|pkg|bat|cmd|sh|scr|jar|apk|ps1|vbs)(\?|#|$)/i;
+  const DOUBLE_EXT = /\.(pdf|doc|docx|xls|xlsx|jpg|png|txt|zip)\.(exe|scr|bat|cmd|js|vbs)(\?|#|$)/i;
+
+  const downloadLinks = Array.from(document.querySelectorAll('a[href]'))
+    .map(a => a.href)
+    .filter(href => EXEC_EXT.test(href))
+    .slice(0, 30)
+    .map(href => {
+      let host = null, proto = null;
+      try { const u = new URL(href); host = u.hostname; proto = u.protocol; } catch {}
+      return {
+        host,
+        protocol: proto,
+        sameSite:  host ? !isThirdParty(href, pageHost) : false,
+        isIP:      host ? /^(\d{1,3}\.){3}\d{1,3}$/.test(host) : false,
+        doubleExt: DOUBLE_EXT.test(href)
+      };
+    });
+
   const hasDownloadLinks = downloadLinks.length > 0;
 
   // Check for pop-up / redirect scripts (heuristic: onbeforeunload)
@@ -275,6 +293,7 @@
 
     // Behavior
     hasDownloadLinks,
+    downloadLinks,
     hasBeforeUnload,
 
     // Links

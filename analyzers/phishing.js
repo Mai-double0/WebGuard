@@ -71,12 +71,26 @@ export function analyzePhishing(pageData) {
   // =====================
   // PASSWORD FIELD
   // =====================
-  if (pageData.hasPasswordField) {
-    score -= 6;
+  const otherPhishingSignals =
+    pageData.hasIPAddress ||
+    pageData.hasPunycode ||
+    (pageData.subdomainCount || 0) >= 3 ||
+    pageData.protocol !== 'https:' ||
+    (pageData.externalFormActions?.length || 0) > 0;
+
+  if (pageData.hasPasswordField && otherPhishingSignals) {
+    score -= 8;
     findings.push({
-      type: 'warning',
-      icon: '⚠',
-      text: 'Login/password form detected — verify site identity before entering credentials.',
+      type: 'danger',
+      icon: '✗',
+      text: 'Login form appears together with other phishing indicators — do not enter credentials unless you are certain of this site.',
+      category: 'phishing'
+    });
+  } else if (pageData.hasPasswordField) {
+    findings.push({
+      type: 'neutral',
+      icon: 'ℹ',
+      text: 'Login form present, with no other phishing indicators alongside it. Always check the domain before signing in.',
       category: 'phishing'
     });
   } else {
