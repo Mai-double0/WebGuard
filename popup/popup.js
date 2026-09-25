@@ -78,11 +78,8 @@ function renderResult(result) {
   setText('risk-label', riskLabel);
   renderVerdict(result.verdict);
 
-  // Show limited analysis note if applicable
-  const noteEl = document.getElementById('limited-note');
-  if (result.pageData?.limitedAnalysis && noteEl) {
-  noteEl.classList.remove('hidden');
-  }
+  // Show limited analysis note if applicable (and hide it again after a full rescan)
+  el('limited-note')?.classList.toggle('hidden', !result.pageData?.limitedAnalysis);
 
   // Category scores
   if (categories) {
