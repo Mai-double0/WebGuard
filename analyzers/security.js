@@ -165,12 +165,7 @@ function analyzeHeaders(pageData, isHttps, add) {
     add('warning', '⚠', `Server software version disclosed ("${banner.slice(0, 60)}") — makes it easier to look up known vulnerabilities.`);
   }
 
-  const cookies = (rh.setCookies || []).map(c => ({
-    name:     c.split('=')[0].trim(),
-    secure:   /;\s*secure/i.test(c),
-    httpOnly: /;\s*httponly/i.test(c)
-  }));
-  const sessionCookies = cookies.filter(c => SESSION_COOKIE.test(c.name));
+  const sessionCookies = (rh.cookies || []).filter(c => SESSION_COOKIE.test(c.name));
 
   const noHttpOnly = sessionCookies.filter(c => !c.httpOnly);
   if (noHttpOnly.length > 0) {

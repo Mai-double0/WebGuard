@@ -47,33 +47,52 @@ function getScanState(tabId) { return tabScanState[tabId] || null; }
 // going to sleep. Cleared automatically when the browser closes.
 const HEADERS_KEY = (tabId) => `webguard_headers_${tabId}`;
 
-// Keep cookie name and flags, drop the value — WebGuard never stores cookie contents.
-function redactCookie(raw) {
-  return String(raw).replace(/^([^=;]*)=[^;]*/, '$1=[redacted]');
+// Only the headers the analyzers read are kept; anything else (e.g. tokens in
+// custom headers) is never stored.
+const KEPT_HEADERS = new Set([
+  'content-security-policy', 'strict-transport-security', 'x-frame-options',
+  'x-content-type-options', 'referrer-policy', 'server', 'x-powered-by'
+]);
+
+// Keep cookie name and flags only — WebGuard never stores cookie values.
+// A Set-Cookie without '=' in its first part is a nameless cookie whose value is that part.
+function parseCookie(raw) {
+  const [first, ...attrs] = raw.split(';');
+  const eq = first.indexOf('=');
+  const flags = attrs.map(a => a.split('=')[0].trim().toLowerCase());
+  return {
+    name:     eq >= 0 ? first.slice(0, eq).trim() : '',
+    secure:   flags.includes('secure'),
+    httpOnly: flags.includes('httponly')
+  };
 }
 
 function captureHeaders(details) {
   if (details.tabId < 0) return;
 
   const headers = {};
-  const setCookies = [];
+  const cookies = [];
 
   for (const h of details.responseHeaders || []) {
     const name  = (h.name || '').toLowerCase();
     const value = h.value || '';
     if (name === 'set-cookie') {
-      value.split('\n').forEach(c => { if (c.trim()) setCookies.push(redactCookie(c.trim())); });
-    } else {
-      headers[name] = value;
+      value.split('\n').forEach(c => { if (c.trim()) cookies.push(parseCookie(c.trim())); });
+    } else if (KEPT_HEADERS.has(name)) {
+      // Repeated headers are combined as HTTP defines (e.g. two CSP policies)
+      headers[name] = name in headers ? `${headers[name]}, ${value}` : value;
     }
   }
 
+  let origin;
+  try { origin = new URL(details.url).origin; } catch { return; }
+
   chrome.storage.session.set({
     [HEADERS_KEY(details.tabId)]: {
-      url:        details.url,
+      origin,
       statusCode: details.statusCode,
       headers,
-      setCookies,
+      cookies,
       capturedAt: Date.now()
     }
   }).catch(err => console.warn('WebGuard: could not store headers', err));
@@ -93,7 +112,7 @@ async function getHeadersForPage(tabId, pageUrl) {
     const data = await chrome.storage.session.get(key);
     const h    = data[key];
     if (!h) return null;
-    return new URL(h.url).origin === new URL(pageUrl).origin ? h : null;
+    return h.origin === new URL(pageUrl).origin ? h : null;
   } catch {
     return null;
   }
