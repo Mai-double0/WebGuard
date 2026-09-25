@@ -63,3 +63,15 @@ export function isAnalyzableUrl(url) {
     !url.startsWith('chrome-extension://') &&
     url !== 'about:blank';
 }
+
+// =====================
+// DOM
+// Page-derived text is only ever set through textContent, never parsed as HTML.
+// =====================
+
+export function createEl(tag, className, text) {
+  const e = document.createElement(tag);
+  if (className) e.className = className;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}

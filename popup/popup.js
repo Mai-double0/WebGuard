@@ -2,7 +2,7 @@
 // Wires the popup UI to the background service worker.
 // Fetches scan result for the current tab and renders it.
 
-import { getCategoryLevel, getCategoryLabel, isAnalyzableUrl } from '../utils/helpers.js';
+import { getCategoryLevel, getCategoryLabel, isAnalyzableUrl, createEl } from '../utils/helpers.js';
 
 // =====================
 // DOM HELPERS
@@ -15,6 +15,12 @@ function el(id) {
 function setText(id, text) {
   const e = el(id);
   if (e) e.textContent = text;
+}
+
+function findingItem(type, icon, text) {
+  const li = createEl('li', `finding-item ${type}`);
+  li.append(createEl('span', 'finding-icon', icon), createEl('span', 'finding-text', text));
+  return li;
 }
 
 // =====================
@@ -37,12 +43,7 @@ function renderScanning() {
   setText('cat-resources', '--');
   setText('cat-resources-level', '--');
 
-  const list = el('findings-list');
-  list.innerHTML = `
-    <li class="finding-item neutral">
-      <span class="finding-icon">⏳</span>
-      <span class="finding-text">Analysis in progress...</span>
-    </li>`;
+  el('findings-list').replaceChildren(findingItem('neutral', '⏳', 'Analysis in progress...'));
 
     renderVerdict(null);
 }
@@ -54,12 +55,7 @@ function renderError(message) {
   setText('risk-label', 'UNAVAILABLE');
   el('risk-badge').className = 'risk-badge';
 
-  const list = el('findings-list');
-  list.innerHTML = `
-    <li class="finding-item neutral">
-      <span class="finding-icon">ℹ</span>
-      <span class="finding-text">${sanitize(message || 'Page could not be analyzed.')}</span>
-    </li>`;
+  el('findings-list').replaceChildren(findingItem('neutral', 'ℹ', message || 'Page could not be analyzed.'));
 
     renderVerdict(null);
 }
@@ -144,33 +140,13 @@ function renderVerdict(verdict) {
 function renderFindings(findings) {
   const list = el('findings-list');
   if (!findings.length) {
-    list.innerHTML = `
-      <li class="finding-item neutral">
-        <span class="finding-icon">ℹ</span>
-        <span class="finding-text">No significant findings.</span>
-      </li>`;
+    list.replaceChildren(findingItem('neutral', 'ℹ', 'No significant findings.'));
     return;
   }
 
   // Show max 6 findings in popup (full list in dashboard)
-  const shown = findings.slice(0, 6);
-  list.innerHTML = shown.map(f => `
-    <li class="finding-item ${sanitize(f.type || 'neutral')}">
-      <span class="finding-icon">${sanitize(f.icon || 'ℹ')}</span>
-      <span class="finding-text">${sanitize(f.text || '')}</span>
-    </li>
-  `).join('');
-}
-
-// =====================
-// SANITIZER
-// Prevent XSS — all dynamic text must go through this
-// =====================
-
-function sanitize(str) {
-  const div = document.createElement('div');
-  div.textContent = String(str);
-  return div.innerHTML;
+  list.replaceChildren(...findings.slice(0, 6).map(f =>
+    findingItem(f.type || 'neutral', f.icon || 'ℹ', f.text || '')));
 }
 
 // =====================
