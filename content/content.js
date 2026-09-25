@@ -153,11 +153,30 @@
 
   const forms = Array.from(document.querySelectorAll('form'));
 
+  // A form exposes its named controls as properties, so <input name="action">
+  // or <input name="method"> replaces form.action / form.method, and can even
+  // replace form.getAttribute. Read forms through the Element prototype.
+  const formAttr = (f, name) => Element.prototype.getAttribute.call(f, name);
+  const formHas  = (f, selector) => Element.prototype.querySelector.call(f, selector) !== null;
+
+  // Same result as form.action: the document URL when the attribute is empty
+  function formAction(f) {
+    const attr = formAttr(f, 'action');
+    if (!attr) return pageUrl;
+    try { return new URL(attr, document.baseURI).href; } catch { return pageUrl; }
+  }
+
+  // Same result as form.method: invalid or missing values mean GET
+  function formMethod(f) {
+    const m = (formAttr(f, 'method') || '').toLowerCase();
+    return m === 'post' || m === 'dialog' ? m : 'get';
+  }
+
   const hasPasswordField = document.querySelector('input[type="password"]') !== null;
   const hasCreditCard    = Array.from(document.querySelectorAll('input'))
     .some(i => /card|credit|cvv|cvc|expir/i.test(i.name + i.id + i.placeholder));
 
-  const formActions = forms.map(f => f.action).filter(Boolean);
+  const formActions = forms.map(formAction);
   const externalFormActions = formActions.filter(a => isThirdParty(a, pageHost));
 
   // =====================
@@ -228,11 +247,11 @@
 
   // Forms containing a password field: how and where do they submit?
   const passwordForms = forms
-    .filter(f => f.querySelector('input[type="password"]'))
+    .filter(f => formHas(f, 'input[type="password"]'))
     .map(f => ({
-      method:         (f.method || 'get').toLowerCase(),
-      actionProtocol: getProtocol(f.action || pageUrl),
-      actionExternal: f.action ? isThirdParty(f.action, pageHost) : false
+      method:         formMethod(f),
+      actionProtocol: getProtocol(formAction(f)),
+      actionExternal: isThirdParty(formAction(f), pageHost)
     }));
 
   // Third-party scripts loaded without Subresource Integrity
