@@ -95,8 +95,6 @@
     .map(a => a.href)
     .filter(Boolean);
 
-  const externalLinks = links.filter(l => isThirdParty(l, pageHost));
-
   // =====================
   // ALL THIRD-PARTY DOMAINS
   // =====================
@@ -156,7 +154,6 @@
   const forms = Array.from(document.querySelectorAll('form'));
 
   const hasPasswordField = document.querySelector('input[type="password"]') !== null;
-  const hasEmailField    = document.querySelector('input[type="email"]')    !== null;
   const hasCreditCard    = Array.from(document.querySelectorAll('input'))
     .some(i => /card|credit|cvv|cvc|expir/i.test(i.name + i.id + i.placeholder));
 
@@ -164,17 +161,9 @@
   const externalFormActions = formActions.filter(a => isThirdParty(a, pageHost));
 
   // =====================
-  // META TAGS
+  // CSP VIA META TAG
   // =====================
 
-  const metaTags = {};
-  document.querySelectorAll('meta').forEach(m => {
-    const name = m.getAttribute('name') || m.getAttribute('property') || m.getAttribute('http-equiv');
-    const content = m.getAttribute('content');
-    if (name && content) metaTags[name.toLowerCase()] = content;
-  });
-
-  // CSP via meta tag
   const hasMetaCSP = !!document.querySelector(
     'meta[http-equiv="Content-Security-Policy"]'
   );
@@ -233,8 +222,6 @@
 
   const hasDownloadLinks = downloadLinks.length > 0;
 
-  // Check for pop-up / redirect scripts (heuristic: onbeforeunload)
-  const hasBeforeUnload = typeof window.onbeforeunload === 'function';
   // =====================
   // DEEP CHECK DATA (passive)
   // =====================
@@ -262,6 +249,8 @@
 
   // =====================
   // ASSEMBLE PAYLOAD
+  // Only what the analyzers use. Meta tag contents, link lists and other
+  // page text are not collected (meta tags often hold CSRF tokens).
   // =====================
 
   const pageData = {
@@ -273,9 +262,6 @@
     // Scripts
     scripts,
     thirdPartyScripts,
-
-    // Stylesheets
-    stylesheets,
 
     // Iframes
     iframes,
@@ -295,13 +281,10 @@
 
     // Forms
     hasPasswordField,
-    hasEmailField,
     hasCreditCard,
     externalFormActions,
-    formCount: forms.length,
 
-    // Meta
-    metaTags,
+    // CSP
     hasMetaCSP,
 
     // Mixed content
@@ -318,18 +301,11 @@
     // Behavior
     hasDownloadLinks,
     downloadLinks,
-    hasBeforeUnload,
 
     // Deep checks
     passwordForms,
     thirdPartyNoSRI,
-    sessionIdInUrl,
-
-    // Links
-    externalLinks: externalLinks.slice(0, 50), // cap to avoid huge payloads
-
-    // Timestamp
-    collectedAt: Date.now()
+    sessionIdInUrl
   };
 
   // =====================

@@ -201,7 +201,6 @@ function buildFallbackData(url, urlObj) {
     protocol:               urlObj.protocol,
     scripts:                [],
     thirdPartyScripts:      [],
-    stylesheets:            [],
     iframes:                [],
     thirdPartyIframes:      [],
     hiddenIframes:          [],
@@ -211,11 +210,8 @@ function buildFallbackData(url, urlObj) {
     adResources:            [],
     analyticsResources:     [],
     hasPasswordField:       false,
-    hasEmailField:          false,
     hasCreditCard:          false,
     externalFormActions:    [],
-    formCount:              0,
-    metaTags:               {},
     hasMetaCSP:             false,
     mixedContentIndicators: [],
     subdomainCount:         urlObj.hostname.split('.').length - 2,
@@ -226,9 +222,6 @@ function buildFallbackData(url, urlObj) {
     hasEncodedChars:        url.includes('%'),
     hasDownloadLinks:       false,
     downloadLinks:          [],
-    hasBeforeUnload:        false,
-    externalLinks:          [],
-    collectedAt:            Date.now(),
     limitedAnalysis:        true
   };
 }
