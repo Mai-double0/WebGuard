@@ -387,3 +387,40 @@ body {
   padding: 12px 16px;
 }
 .mt { margin-top: 20px; }
+
+/* --- TRUST VERDICT --- */
+.hidden { display: none; }
+
+.verdict {
+  margin: 16px 24px 0;
+  padding: 14px 18px;
+  border-radius: var(--radius);
+  border-left: 4px solid var(--border);
+  background: var(--bg-secondary);
+}
+
+.verdict-label {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.verdict-reasons {
+  list-style: none;
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.verdict-reasons li {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.verdict.no      { border-left-color: var(--accent-red);    background: #3b1212; }
+.verdict.no .verdict-label      { color: #f87171; }
+.verdict.caution { border-left-color: var(--accent-yellow); background: #3a2e0b; }
+.verdict.caution .verdict-label { color: #fbbf24; }
+.verdict.ok      { border-left-color: var(--accent-green);  background: #0f2e1c; }
+.verdict.ok .verdict-label      { color: #4ade80; }

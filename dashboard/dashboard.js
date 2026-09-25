@@ -215,6 +215,27 @@ function renderRecommendations(explanation) {
   }
 }
 
+function renderVerdict(verdict) {
+  const box = el('verdict');
+  if (!box) return;
+
+  const icons = { no: '⛔', caution: '⚠', ok: '✓' };
+  if (!verdict || !icons[verdict.level]) {
+    box.className = 'verdict hidden';
+    return;
+  }
+
+  box.className = `verdict ${verdict.level}`;
+  setText('verdict-label', `${icons[verdict.level]} ${verdict.label}`);
+
+  const list = el('verdict-reasons');
+  if (list) {
+    list.innerHTML = (verdict.reasons || [])
+      .map(r => `<li>${sanitize(r)}</li>`)
+      .join('');
+  }
+}
+
 function renderError(message) {
   setText('site-domain', 'Analysis Unavailable');
   setText('site-url', message || 'Could not load scan result.');
@@ -224,6 +245,7 @@ function renderError(message) {
 function renderResult(result) {
   const explanation = generateExplanation(result);
   renderHeader(result);
+  renderVerdict(result.verdict);
   renderOverview(result, explanation);
   renderSecurityTab(result, explanation);
   renderPrivacyTab(result, explanation);
