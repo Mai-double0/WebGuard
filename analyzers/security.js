@@ -118,7 +118,7 @@ function analyzeHeaders(pageData, isHttps, add) {
   const rh = pageData.responseHeaders;
 
   if (!rh) {
-    add('neutral', 'ℹ', 'Security headers: not available — response headers were not captured for this page (e.g. cached or restricted load). Not scored.');
+        add('neutral', 'ℹ', 'Security headers: not available — this page was loaded before WebGuard started, or restored from cache. Reload the page (Ctrl+Shift+R) for a full check. Not scored.');
     return 0;
   }
 

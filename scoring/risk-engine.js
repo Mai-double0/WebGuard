@@ -28,7 +28,7 @@ export function getRiskLabel(score) {
   return 'CRITICAL RISK';
 }
 
-function buildVerdict(findings, score, coverageLimited) {
+function buildVerdict(findings, score, coverageLimited, securityPct) {
   const blockers = findings.filter(f => f.blocker).map(f => f.text);
   const cautions = findings.filter(f => f.caution).map(f => f.text);
 
@@ -38,11 +38,19 @@ function buildVerdict(findings, score, coverageLimited) {
   if (cautions.length) {
     return { level: 'caution', label: 'Use with caution', reasons: cautions.slice(0, 2) };
   }
+  if (coverageLimited) {
+    return { level: 'caution', label: 'Not fully checked', reasons: ['Some checks could not run on this page. Reload it (Ctrl+Shift+R) for a full verdict.'] };
+  }
+  if (securityPct < 0.75) {
+    const gaps = findings.filter(f => f.category === 'security' && f.type === 'warning').length;
+    return {
+      level: 'caution',
+      label: 'Use with caution',
+      reasons: [`Weak security hardening — ${gaps} standard protection(s) missing. This doesn't prove an attack, but the site is less protected than it should be.`]
+    };
+  }
   if (score < 75) {
     return { level: 'caution', label: 'Use with caution', reasons: ['Several weaker security or privacy indicators add up — see the findings.'] };
-  }
-  if (coverageLimited) {
-    return { level: 'caution', label: 'Not fully checked', reasons: ['Some checks could not run on this page, so WebGuard cannot give a full verdict.'] };
   }
   return { level: 'ok', label: 'No blocking issues found', reasons: ['Nothing observed suggests avoiding this page. This is not a guarantee of safety.'] };
 }
@@ -118,7 +126,7 @@ export function runRiskEngine(pageData) {
     score,
     riskLevel: getRiskLevel(score),
     riskLabel: getRiskLabel(score),
-    verdict:   buildVerdict(allFindings, score, coverageLimited),
+    verdict:   buildVerdict(allFindings, score, coverageLimited, security.score / 25),
     categories: {
       security:  { score: security.score,  maxScore: 25 },
       privacy:   { score: privacy.score,   maxScore: 30 },
