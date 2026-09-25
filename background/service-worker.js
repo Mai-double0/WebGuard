@@ -43,7 +43,9 @@ function getScanState(tabId) { return tabScanState[tabId] || null; }
 // RESPONSE HEADER CAPTURE (main document only)
 // Read-only observation — WebGuard never modifies or blocks requests.
 // =====================
-const tabHeaders = {};
+// Headers are kept in session storage so they survive the service worker
+// going to sleep. Cleared automatically when the browser closes.
+const HEADERS_KEY = (tabId) => `webguard_headers_${tabId}`;
 
 // Keep cookie name and flags, drop the value — WebGuard never stores cookie contents.
 function redactCookie(raw) {
@@ -66,29 +68,31 @@ function captureHeaders(details) {
     }
   }
 
-  tabHeaders[details.tabId] = {
-    url:        details.url,
-    statusCode: details.statusCode,
-    headers,
-    setCookies,
-    capturedAt: Date.now()
-  };
+  chrome.storage.session.set({
+    [HEADERS_KEY(details.tabId)]: {
+      url:        details.url,
+      statusCode: details.statusCode,
+      headers,
+      setCookies,
+      capturedAt: Date.now()
+    }
+  }).catch(err => console.warn('WebGuard: could not store headers', err));
 }
 
 const HEADER_FILTER = { urls: ['<all_urls>'], types: ['main_frame'] };
 try {
-  // 'extraHeaders' is needed in Chrome to see Set-Cookie
   chrome.webRequest.onHeadersReceived.addListener(captureHeaders, HEADER_FILTER, ['responseHeaders', 'extraHeaders']);
 } catch (err) {
-  // Browsers without 'extraHeaders' (e.g. Firefox) still get the other headers
   chrome.webRequest.onHeadersReceived.addListener(captureHeaders, HEADER_FILTER, ['responseHeaders']);
 }
 
 // Only use captured headers if they belong to the same site as the analyzed page
-function getHeadersForPage(tabId, pageUrl) {
-  const h = tabHeaders[tabId];
-  if (!h) return null;
+async function getHeadersForPage(tabId, pageUrl) {
   try {
+    const key  = HEADERS_KEY(tabId);
+    const data = await chrome.storage.session.get(key);
+    const h    = data[key];
+    if (!h) return null;
     return new URL(h.url).origin === new URL(pageUrl).origin ? h : null;
   } catch {
     return null;
@@ -241,7 +245,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   delete tabScanState[tabId];
-  delete tabHeaders[tabId];
+  chrome.storage.session.remove(HEADERS_KEY(tabId));
 });
 
 // =====================
@@ -276,7 +280,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // =====================
 async function analyzeAndScore(tabId, pageData) {
   try {
-    pageData.responseHeaders = getHeadersForPage(tabId, pageData.url);
+    pageData.responseHeaders = await getHeadersForPage(tabId, pageData.url);
     pageData.certError       = await getCertErrorForHost(pageData.domain);
 
     const result = runRiskEngine(pageData);
