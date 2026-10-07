@@ -271,6 +271,17 @@ body {
   z-index: 3;
 }
 
+/* Reduced motion: no transitions at all. Hover, focus and selected states
+   still change colour, but the fill and label swap are instant. */
+@media (prefers-reduced-motion: reduce) {
+  .tab-btn,
+  .tab-btn .hover-circle,
+  .tab-btn .pill-label,
+  .tab-btn .pill-label-hover {
+    transition: none;
+  }
+}
+
 /* --- TAB PANELS --- */
 .tab-content { padding: 24px; max-width: 900px; margin: 0 auto; }
 
