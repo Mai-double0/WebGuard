@@ -38,7 +38,7 @@ Passive checks for concrete weaknesses that browsers do not surface in their UI:
 | Login form submitted via `GET` | Password ends up in history, logs, and Referer headers |
 | Login form posting to `http://` from an HTTPS page | Password sent unencrypted |
 | Session IDs in URLs (`;jsessionid=`) | Session hijacking through leaked links |
-| Session cookies without `HttpOnly` / `Secure` | Session theft via XSS or plain HTTP |
+| Session cookies without `HttpOnly` / `Secure` | Session theft via XSS or plain HTTP. Only well-known session names (e.g. `JSESSIONID`, `PHPSESSID`, `*_session`) affect the verdict; names that merely *may* be session cookies count only on pages with a login form |
 | Missing / weak security headers (CSP, HSTS, X-Frame-Options, nosniff) | Reduced protection against XSS, clickjacking, and downgrade attacks |
 | Server version disclosure | Makes known-vulnerability lookup easier |
 
@@ -132,6 +132,8 @@ webguard/
 │   └── explanation-engine.js   # Plain-language explanations and recommendations
 ├── popup/                      # Toolbar popup UI
 ├── dashboard/                  # Full analysis page
+├── tests/
+│   └── session-cookies.test.mjs  # Dependency-free test for session-cookie detection
 ├── storage/
 │   └── storage.js              # Local scan-history module (not yet wired in)
 ├── utils/
@@ -153,6 +155,20 @@ webguard/
 5. Visit any website and click the WebGuard icon
 
 Tested on Google Chrome. Microsoft Edge (Chromium) should work with the same build; Firefox support is planned.
+
+---
+
+## 🧪 Running the tests
+
+The tests are plain Node scripts with no dependencies. You need Node 18 or newer; there is nothing to install.
+
+```bash
+npm test
+# or, without npm:
+node tests/session-cookies.test.mjs
+```
+
+`package.json` exists only to run the tests and let Node load the extension's ES modules. Chrome ignores it.
 
 ---
 
