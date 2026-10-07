@@ -8,7 +8,29 @@
 
 import { runDeepChecks } from './deep-checks.js';
 
-const SESSION_COOKIE = /sess|sid|auth|token|login|jsession|phpsessid|asp\.net/i;
+// Session cookie detection. Substring matching (e.g. /sid/) flags unrelated
+// cookies such as SIDCC or activitySessionId, so names are matched exactly or
+// by whole word instead.
+const KNOWN_SESSION_NAMES = new Set([
+  'jsessionid', 'phpsessid', 'asp.net_sessionid', 'connect.sid',
+  'laravel_session', 'ci_session', 'sessionid', 'session_id', 'sid'
+]);
+const KNOWN_SESSION_PATTERNS = [
+  /^aspsessionid[a-z]*$/,  // classic ASP: ASPSESSIONIDQQQRSTUV
+  /_session$/             // framework convention: myapp_session
+];
+const SESSION_WORDS = new Set(['session', 'sessionid']);
+
+// 'known' → a well-known session cookie name
+// 'maybe' → "session" appears as a whole word, but the name is not a known one
+// null    → not treated as a session cookie
+export function classifySessionCookie(name) {
+  // __Host- / __Secure- are cookie-name prefixes, not part of the name itself
+  const n = String(name || '').toLowerCase().replace(/^__(host|secure)-/, '');
+  if (KNOWN_SESSION_NAMES.has(n) || KNOWN_SESSION_PATTERNS.some(p => p.test(n))) return 'known';
+  if (n.split(/[_\-.:]/).some(word => SESSION_WORDS.has(word))) return 'maybe';
+  return null;
+}
 
 export function analyzeSecurity(pageData) {
   const findings = [];
@@ -165,7 +187,7 @@ function analyzeHeaders(pageData, isHttps, add) {
     add('warning', '⚠', `Server software version disclosed ("${banner.slice(0, 60)}") — makes it easier to look up known vulnerabilities.`);
   }
 
-  const sessionCookies = (rh.cookies || []).filter(c => SESSION_COOKIE.test(c.name));
+  const sessionCookies = (rh.cookies || []).filter(c => classifySessionCookie(c.name));
 
   const noHttpOnly = sessionCookies.filter(c => !c.httpOnly);
   if (noHttpOnly.length > 0) {
