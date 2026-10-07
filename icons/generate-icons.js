@@ -2,14 +2,21 @@ const { createCanvas } = require('canvas');
 const fs = require('fs');
 const path = require('path');
 
+// Colours match styles/tokens.css (warm stone + orchid palette).
+const COLORS = {
+  background: '#141211', // --bg
+  shield: '#e879f9',     // --accent
+  letter: '#1f0a23',     // --on-accent: dark on the accent, 7.6:1 (white would be 2.2:1)
+};
+
 function generateIcon(size) {
   const canvas = createCanvas(size, size);
   const ctx = canvas.getContext('2d');
 
-  // Background circle — dark navy
+  // Background circle — near-black warm stone
   ctx.beginPath();
   ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
-  ctx.fillStyle = '#0f172a';
+  ctx.fillStyle = COLORS.background;
   ctx.fill();
 
   // Inner shield shape
@@ -25,12 +32,12 @@ function generateIcon(size) {
   ctx.quadraticCurveTo(cx - s * 0.4, cy + s * 0.5, cx - s * 0.4, cy + s * 0.1);
   ctx.lineTo(cx - s * 0.4, cy - s * 0.2);
   ctx.closePath();
-  ctx.fillStyle = '#3b82f6';
+  ctx.fillStyle = COLORS.shield;
   ctx.fill();
 
   // Letter G inside shield
   if (size >= 48) {
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = COLORS.letter;
     ctx.font = `bold ${Math.floor(size * 0.3)}px Arial`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
