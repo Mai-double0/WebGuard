@@ -258,6 +258,10 @@ body {
 }
 
 .btn-rescan {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   padding: 8px 12px;
   background: var(--raised);
   color: var(--text);
@@ -271,6 +275,23 @@ body {
 
 .btn-rescan:hover {
   background: var(--border);
+}
+
+/* Refresh icon: sits on the text's middle line; spins while a rescan runs. */
+.btn-icon {
+  flex-shrink: 0;
+}
+
+.btn-rescan.is-rescanning .btn-icon {
+  animation: btn-icon-spin 0.8s linear infinite;
+}
+
+@keyframes btn-icon-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-rescan.is-rescanning .btn-icon { animation: none; }
 }
 
 .limited-note {

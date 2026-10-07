@@ -318,7 +318,9 @@ document.addEventListener('DOMContentLoaded', () => {
   tryLoad();
 
   // Rescan button
-  el('btn-rescan')?.addEventListener('click', () => {
+  const rescanBtn = el('btn-rescan');
+  rescanBtn?.addEventListener('click', () => {
+    rescanBtn.classList.add('is-rescanning');   // the page reloads when the rescan is done
     chrome.runtime.sendMessage({ type: 'RESCAN', tabId }, () => {
       // Drop the popup's snapshot so the reload shows the new scan
       chrome.storage.session.remove(`webguard_result_${tabId}`, () => {
