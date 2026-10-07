@@ -187,19 +187,53 @@ function analyzeHeaders(pageData, isHttps, add) {
     add('warning', '⚠', `Server software version disclosed ("${banner.slice(0, 60)}") — makes it easier to look up known vulnerabilities.`);
   }
 
-  const sessionCookies = (rh.cookies || []).filter(c => classifySessionCookie(c.name));
+  const sessionCookies = (rh.cookies || [])
+    .map(c => ({ ...c, kind: classifySessionCookie(c.name) }))
+    .filter(c => c.kind);
 
-  const noHttpOnly = sessionCookies.filter(c => !c.httpOnly);
-  if (noHttpOnly.length > 0) {
-    penalty += 2;
-    add('warning', '⚠', `Session cookie(s) without HttpOnly (${noHttpOnly.slice(0, 3).map(c => c.name).join(', ')}) — page scripts can read them, so an XSS bug could steal the session.`, { caution: true });
-  }
+  penalty += reportSessionCookieFlags(sessionCookies, pageData.hasPasswordField === true, isHttps, add);
 
-  if (isHttps) {
-    const noSecure = sessionCookies.filter(c => !c.secure);
-    if (noSecure.length > 0) {
+  return penalty;
+}
+
+// A cookie with a well-known session name is reported (and can affect the
+// verdict) as a session cookie. One that only might be a session cookie is
+// penalised only when the page has a login form; otherwise it is informational.
+// Only cookie names and flags are ever read.
+function reportSessionCookieFlags(cookies, hasLoginForm, isHttps, add) {
+  const checks = [
+    {
+      label: 'HttpOnly',
+      missing: c => !c.httpOnly,
+      risk: 'page scripts can read them, so an XSS bug could steal the session'
+    },
+    {
+      label: 'the Secure flag',
+      missing: c => !c.secure,
+      risk: 'they could be sent over unencrypted HTTP',
+      httpsOnly: true
+    }
+  ];
+
+  const names = list => list.slice(0, 3).map(c => c.name).join(', ');
+  let penalty = 0;
+
+  for (const check of checks) {
+    if (check.httpsOnly && !isHttps) continue;
+
+    const known = cookies.filter(c => c.kind === 'known' && check.missing(c));
+    const maybe = cookies.filter(c => c.kind === 'maybe' && check.missing(c));
+
+    if (known.length > 0) {
       penalty += 2;
-      add('warning', '⚠', `Session cookie(s) without the Secure flag (${noSecure.slice(0, 3).map(c => c.name).join(', ')}) — could be sent over unencrypted HTTP.`, { caution: true });
+      add('warning', '⚠', `Session cookie(s) without ${check.label} (${names(known)}) — ${check.risk}.`, { caution: true });
+    }
+
+    if (maybe.length > 0 && hasLoginForm) {
+      penalty += 2;
+      add('warning', '⚠', `Cookie(s) that may be session cookies are missing ${check.label} (${names(maybe)}). This page has a login form, so if they hold a login session, ${check.risk}.`, { caution: true });
+    } else if (maybe.length > 0) {
+      add('neutral', 'ℹ', `Cookie(s) that may be session cookies are missing ${check.label} (${names(maybe)}). Not scored: no login form was found on this page, so there is no sign they protect a login session.`);
     }
   }
 
