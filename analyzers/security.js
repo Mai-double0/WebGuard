@@ -8,7 +8,34 @@
 
 import { runDeepChecks } from './deep-checks.js';
 
-const SESSION_COOKIE = /sess|sid|auth|token|login|jsession|phpsessid|asp\.net/i;
+// Session cookie detection. Substring matching (e.g. /sid/) flags unrelated
+// cookies such as SIDCC or activitySessionId, so names are matched exactly or
+// by whole word instead.
+const KNOWN_SESSION_NAMES = new Set([
+  'jsessionid', 'phpsessid', 'asp.net_sessionid', 'connect.sid',
+  'laravel_session', 'ci_session', 'sessionid', 'session_id', 'sid'
+]);
+const KNOWN_SESSION_PATTERNS = [
+  /^aspsessionid[a-z]*$/,  // classic ASP: ASPSESSIONIDQQQRSTUV
+  /_session$/             // framework convention: myapp_session
+];
+const SESSION_WORDS = new Set(['session', 'sessionid']);
+// "<prefix>_token" as separate words: auth_token, access_token, refresh_token, login_token
+const TOKEN_PREFIXES = new Set(['auth', 'access', 'refresh', 'login']);
+
+// 'known' → a well-known session cookie name
+// 'maybe' → "session", or an auth/access/refresh/login token, appears as whole
+//           words, but the name is not a known session name
+// null    → not treated as a session cookie
+export function classifySessionCookie(name) {
+  // __Host- / __Secure- are cookie-name prefixes, not part of the name itself
+  const n = String(name || '').toLowerCase().replace(/^__(host|secure)-/, '');
+  if (KNOWN_SESSION_NAMES.has(n) || KNOWN_SESSION_PATTERNS.some(p => p.test(n))) return 'known';
+  const words = n.split(/[_\-.:]/);
+  if (words.some(w => SESSION_WORDS.has(w))) return 'maybe';
+  if (words.some((w, i) => w === 'token' && TOKEN_PREFIXES.has(words[i - 1]))) return 'maybe';
+  return null;
+}
 
 export function analyzeSecurity(pageData) {
   const findings = [];
@@ -165,19 +192,53 @@ function analyzeHeaders(pageData, isHttps, add) {
     add('warning', '⚠', `Server software version disclosed ("${banner.slice(0, 60)}") — makes it easier to look up known vulnerabilities.`);
   }
 
-  const sessionCookies = (rh.cookies || []).filter(c => SESSION_COOKIE.test(c.name));
+  const sessionCookies = (rh.cookies || [])
+    .map(c => ({ ...c, kind: classifySessionCookie(c.name) }))
+    .filter(c => c.kind);
 
-  const noHttpOnly = sessionCookies.filter(c => !c.httpOnly);
-  if (noHttpOnly.length > 0) {
-    penalty += 2;
-    add('warning', '⚠', `Session cookie(s) without HttpOnly (${noHttpOnly.slice(0, 3).map(c => c.name).join(', ')}) — page scripts can read them, so an XSS bug could steal the session.`, { caution: true });
-  }
+  penalty += reportSessionCookieFlags(sessionCookies, pageData.hasPasswordField === true, isHttps, add);
 
-  if (isHttps) {
-    const noSecure = sessionCookies.filter(c => !c.secure);
-    if (noSecure.length > 0) {
+  return penalty;
+}
+
+// A cookie with a well-known session name is reported (and can affect the
+// verdict) as a session cookie. One that only might be a session cookie is
+// penalised only when the page has a login form; otherwise it is informational.
+// Only cookie names and flags are ever read.
+function reportSessionCookieFlags(cookies, hasLoginForm, isHttps, add) {
+  const checks = [
+    {
+      label: 'HttpOnly',
+      missing: c => !c.httpOnly,
+      risk: 'page scripts can read them, so an XSS bug could steal the session'
+    },
+    {
+      label: 'the Secure flag',
+      missing: c => !c.secure,
+      risk: 'they could be sent over unencrypted HTTP',
+      httpsOnly: true
+    }
+  ];
+
+  const names = list => list.slice(0, 3).map(c => c.name).join(', ');
+  let penalty = 0;
+
+  for (const check of checks) {
+    if (check.httpsOnly && !isHttps) continue;
+
+    const known = cookies.filter(c => c.kind === 'known' && check.missing(c));
+    const maybe = cookies.filter(c => c.kind === 'maybe' && check.missing(c));
+
+    if (known.length > 0) {
       penalty += 2;
-      add('warning', '⚠', `Session cookie(s) without the Secure flag (${noSecure.slice(0, 3).map(c => c.name).join(', ')}) — could be sent over unencrypted HTTP.`, { caution: true });
+      add('warning', '⚠', `Session cookie(s) without ${check.label} (${names(known)}) — ${check.risk}.`, { caution: true });
+    }
+
+    if (maybe.length > 0 && hasLoginForm) {
+      penalty += 2;
+      add('warning', '⚠', `Cookie(s) that may be session cookies are missing ${check.label} (${names(maybe)}). This page has a login form, so if they hold a login session, ${check.risk}.`, { caution: true });
+    } else if (maybe.length > 0) {
+      add('neutral', 'ℹ', `Cookie(s) that may be session cookies are missing ${check.label} (${names(maybe)}). Not scored: no login form was found on this page, so there is no sign they protect a login session.`);
     }
   }
 
