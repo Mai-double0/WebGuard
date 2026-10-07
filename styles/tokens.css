@@ -5,6 +5,7 @@
   --surface:      #1d1b19;  /* header, banner, cards */
   --raised:       #292623;  /* buttons, pills, tags, bar tracks */
   --border:       #45403a;
+  --glass:        #141211d9;  /* --bg at 85%: sticky header over the page grid */
   --text:         #f5f2ee;
   --muted:        #aca69e;
 

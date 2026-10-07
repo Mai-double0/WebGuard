@@ -1,27 +1,35 @@
 // dashboard/cursor-grid.js
-// A faint grid behind the site banner: cells near the pointer light up in the
-// accent colour, hold briefly, then fade. A click sends a ring across the grid.
+// A grid behind the page: a faint always-visible lattice, plus lines near the
+// pointer that light up in the accent colour, hold briefly and fade, with a soft
+// glow under the cursor. A click sends a ring across the grid.
 // Vanilla port of the idea behind React Bits' CursorGrid; used on the dashboard only.
 //
-// - The canvas is purely decorative: pointer-events none, aria-hidden. Pointer
-//   events are listened for on the banner itself, so clicks and text selection
-//   are never blocked.
+// - The canvas is purely decorative (CSS makes it fixed, behind the content,
+//   pointer-events none; aria-hidden). Pointer events are listened for on
+//   `target` (the document), so clicks and text selection are never blocked.
 // - It only animates while something is lit, and not while the tab is hidden.
-// - With prefers-reduced-motion it draws the static lattice once and nothing else.
-// - The peak opacity is capped so text over a lit line stays above 4.5:1
-//   (muted text on the banner measures about 5.0:1 at 0.2).
+// - With prefers-reduced-motion it draws the static lattice and nothing else.
+//
+// Text contrast: text sits directly on the grid in places (page headings, the
+// header). Every pixel of the canvas is drawn at most once by the lines (each
+// segment is its own rect, so lines never overlap, not even at crossings) plus
+// at most the glow, so the brightest possible pixel is
+//     1 - (1 - maxOpacity) * (1 - glowOpacity)  =  0.278 with the defaults,
+// i.e. the accent mixed 28% into the page background. Muted text on that
+// measures 4.7:1 and accent text 4.6:1 (AA needs 4.5:1). Do not raise that
+// bound above 0.28 without re-checking contrast.
 
 const DEFAULTS = {
-  cellSize: 56,
-  radius: 130,
+  cellSize: 64,
+  radius: 240,
   falloff: 'smooth',     // 'linear' | 'smooth' | 'sharp'
-  holdTime: 250,         // ms a lit cell stays before it starts to fade
-  fadeDuration: 700,     // ms for a fully lit cell to fade out
-  lineWidth: 1,
-  maxOpacity: 0.2,
-  gridOpacity: 0.05,     // always-visible lattice; 0 hides it
+  holdTime: 350,         // ms a lit line stays before it starts to fade
+  fadeDuration: 900,     // ms for a fully lit line to fade out
+  maxOpacity: 0.24,      // peak opacity of a lit line
+  gridOpacity: 0.08,     // always-visible lattice; 0 hides it
+  glowOpacity: 0.05,     // soft glow under the pointer; 0 disables it
   clickPulse: true,
-  pulseSpeed: 520,       // px per second
+  pulseSpeed: 700,       // px per second
   maxDpr: 2,
   colorVar: '--accent',
 };
@@ -47,27 +55,38 @@ function readColor(name) {
 }
 
 /**
- * Adds the grid canvas as the first child of `banner` and wires it up.
+ * Adds the grid canvas as the first child of `container` and wires it up.
+ * The canvas fills whatever box the CSS gives it. Pointer events are
+ * listened for on `options.target` (default: `container`).
  * Returns a function that removes the canvas, listeners and observers.
  */
-export function initCursorGrid(banner, options = {}) {
-  if (!banner || typeof HTMLCanvasElement === 'undefined') return () => {};
-  const o = { ...DEFAULTS, ...options };
+export function initCursorGrid(container, options = {}) {
+  if (!container || typeof HTMLCanvasElement === 'undefined') return () => {};
+  const { target = container, ...rest } = options;
+  const o = { ...DEFAULTS, ...rest };
   const ease = FALLOFF[o.falloff] || FALLOFF.linear;
 
   const canvas = document.createElement('canvas');
   canvas.className = 'cursor-grid-canvas';
   canvas.setAttribute('aria-hidden', 'true');
-  banner.prepend(canvas);
+  container.prepend(canvas);
   const ctx = canvas.getContext('2d');
   if (!ctx) { canvas.remove(); return () => {}; }
 
   const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
 
-  let w = 0, h = 0, cols = 0, rows = 0, offX = 0, offY = 0;
-  let alphas = new Float32Array(0);   // per cell, row-major
-  let touched = new Float64Array(0);  // time each cell was last lit
+  let w = 0, h = 0;
+  let xs = new Float32Array(0);       // x of each vertical line
+  let ys = new Float32Array(0);       // y of each horizontal line
+  // Segments: V = vertical, H = horizontal. Midpoints, current level and the
+  // time each was last lit.
+  let vN = 0, hN = 0;
+  let vMx = new Float32Array(0), vMy = new Float32Array(0);
+  let hMx = new Float32Array(0), hMy = new Float32Array(0);
+  let vLevel = new Float32Array(0), hLevel = new Float32Array(0);
+  let vTouched = new Float64Array(0), hTouched = new Float64Array(0);
   let color = [255, 255, 255];
+  const glow = { x: 0, y: 0, level: 0, touched: 0 };
   const pulses = [];
   let raf = 0;
   let running = false;
@@ -76,117 +95,153 @@ export function initCursorGrid(banner, options = {}) {
 
   function rebuild() {
     const dpr = Math.min(window.devicePixelRatio || 1, o.maxDpr);
-    w = banner.clientWidth;
-    h = banner.clientHeight;
+    w = canvas.clientWidth;
+    h = canvas.clientHeight;
     canvas.width = Math.max(1, Math.round(w * dpr));
     canvas.height = Math.max(1, Math.round(h * dpr));
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    cols = Math.ceil(w / o.cellSize) + 1;
-    rows = Math.ceil(h / o.cellSize) + 1;
+
+    const s = o.cellSize;
+    const cols = Math.ceil(w / s) + 1;
+    const rows = Math.ceil(h / s) + 1;
     // Centre the lattice so edge cells crop evenly on both sides
-    offX = (w - cols * o.cellSize) / 2;
-    offY = (h - rows * o.cellSize) / 2;
-    alphas = new Float32Array(cols * rows);
-    touched = new Float64Array(cols * rows);
+    const offX = (w - cols * s) / 2;
+    const offY = (h - rows * s) / 2;
+    xs = Float32Array.from({ length: cols + 1 }, (_, c) => Math.round(offX + c * s));
+    ys = Float32Array.from({ length: rows + 1 }, (_, r) => Math.round(offY + r * s));
+
+    vN = (cols + 1) * rows;
+    hN = cols * (rows + 1);
+    vMx = new Float32Array(vN); vMy = new Float32Array(vN);
+    hMx = new Float32Array(hN); hMy = new Float32Array(hN);
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c <= cols; c++) {
+        vMx[r * (cols + 1) + c] = xs[c] + 0.5;
+        vMy[r * (cols + 1) + c] = (ys[r] + ys[r + 1]) / 2;
+      }
+    }
+    for (let r = 0; r <= rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        hMx[r * cols + c] = (xs[c] + xs[c + 1]) / 2;
+        hMy[r * cols + c] = ys[r] + 0.5;
+      }
+    }
+    vLevel = new Float32Array(vN); hLevel = new Float32Array(hN);
+    vTouched = new Float64Array(vN); hTouched = new Float64Array(hN);
+    glow.level = 0;
     pulses.length = 0;
     color = readColor(o.colorVar);
   }
 
-  function drawLattice() {
-    if (o.gridOpacity <= 0) return;
-    const [r, g, b] = color;
-    ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${o.gridOpacity})`;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let c = 0; c <= cols; c++) {
-      const x = Math.round(offX + c * o.cellSize) + 0.5;
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, h);
-    }
-    for (let r2 = 0; r2 <= rows; r2++) {
-      const y = Math.round(offY + r2 * o.cellSize) + 0.5;
-      ctx.moveTo(0, y);
-      ctx.lineTo(w, y);
-    }
-    ctx.stroke();
-  }
-
-  // Lights every cell whose centre is within `o.radius` of (x, y).
+  // Lights every segment whose midpoint is within `o.radius` of (x, y).
   function energize(x, y) {
-    const s = o.cellSize;
     const r = Math.max(o.radius, 1);
     const now = performance.now();
-    const minCol = Math.max(0, Math.floor((x - r - offX) / s));
-    const maxCol = Math.min(cols - 1, Math.floor((x + r - offX) / s));
-    const minRow = Math.max(0, Math.floor((y - r - offY) / s));
-    const maxRow = Math.min(rows - 1, Math.floor((y + r - offY) / s));
-    for (let row = minRow; row <= maxRow; row++) {
-      for (let col = minCol; col <= maxCol; col++) {
-        const i = row * cols + col;
-        const dist = Math.hypot(offX + col * s + s / 2 - x, offY + row * s + s / 2 - y);
+    const light = (mx, my, level, touched, n) => {
+      for (let i = 0; i < n; i++) {
+        const dist = Math.hypot(mx[i] - x, my[i] - y);
         if (dist > r) continue;
-        const level = ease(1 - dist / r) * o.maxOpacity;
-        if (level > alphas[i]) alphas[i] = level;
-        if (level > 0) touched[i] = now;
+        const l = ease(1 - dist / r) * o.maxOpacity;
+        if (l > level[i]) level[i] = l;
+        if (l > 0) touched[i] = now;
+      }
+    };
+    light(vMx, vMy, vLevel, vTouched, vN);
+    light(hMx, hMy, hLevel, hTouched, hN);
+    glow.x = x; glow.y = y; glow.level = 1; glow.touched = now;
+  }
+
+  // Click rings light the segments they pass over
+  function pulseSegments(p, ringR, now) {
+    const band = o.cellSize / 2;
+    const touch = (mx, my, level, touched, n) => {
+      for (let i = 0; i < n; i++) {
+        if (Math.abs(Math.hypot(mx[i] - p.x, my[i] - p.y) - ringR) < band && o.maxOpacity > level[i]) {
+          level[i] = o.maxOpacity;
+          touched[i] = now;
+        }
+      }
+    };
+    touch(vMx, vMy, vLevel, vTouched, vN);
+    touch(hMx, hMy, hLevel, hTouched, hN);
+  }
+
+  // Fades segments that have been lit for longer than holdTime. Returns true
+  // while any segment is still lit.
+  function fade(level, touched, n, now, step) {
+    let lit = false;
+    for (let i = 0; i < n; i++) {
+      let a = level[i];
+      if (a <= 0) continue;
+      if (now - touched[i] > o.holdTime) {
+        a = Math.max(0, a - step);
+        level[i] = a;
+        if (a <= 0) continue;
+      }
+      lit = true;
+    }
+    return lit;
+  }
+
+  function paint() {
+    ctx.clearRect(0, 0, w, h);
+    const [r, g, b] = color;
+    const rgb = `rgb(${r}, ${g}, ${b})`;
+
+    if (o.glowOpacity > 0 && glow.level > 0) {
+      const a = o.glowOpacity * glow.level;
+      const grad = ctx.createRadialGradient(glow.x, glow.y, 0, glow.x, glow.y, o.radius * 1.2);
+      grad.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${a})`);
+      grad.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+    }
+
+    // Each segment is its own rect and no two share a pixel: vertical
+    // segments own the crossing pixel, horizontal ones start after it.
+    ctx.fillStyle = rgb;
+    const cols = xs.length - 1;
+    const rows = ys.length - 1;
+    for (let rI = 0; rI < rows; rI++) {
+      for (let c = 0; c <= cols; c++) {
+        const a = Math.max(o.gridOpacity, vLevel[rI * (cols + 1) + c]);
+        if (a <= 0) continue;
+        ctx.globalAlpha = a;
+        ctx.fillRect(xs[c], ys[rI], 1, ys[rI + 1] - ys[rI]);
       }
     }
+    for (let rI = 0; rI <= rows; rI++) {
+      for (let c = 0; c < cols; c++) {
+        const a = Math.max(o.gridOpacity, hLevel[rI * cols + c]);
+        if (a <= 0) continue;
+        ctx.globalAlpha = a;
+        ctx.fillRect(xs[c] + 1, ys[rI], xs[c + 1] - xs[c] - 1, 1);
+      }
+    }
+    ctx.globalAlpha = 1;
   }
 
   function draw(now) {
     const dt = Math.min(now - lastFrame, 50);
     lastFrame = now;
-    ctx.clearRect(0, 0, w, h);
-    drawLattice();
 
-    const s = o.cellSize;
-    const half = s / 2;
-    const [r, g, b] = color;
-
-    // Click rings hand their energy to the cells they pass over
     for (let pi = pulses.length - 1; pi >= 0; pi--) {
       const p = pulses[pi];
       const ringR = ((now - p.t0) / 1000) * o.pulseSpeed;
-      if (ringR > Math.hypot(w, h) + s) { pulses.splice(pi, 1); continue; }
-      const minCol = Math.max(0, Math.floor((p.x - ringR - s - offX) / s));
-      const maxCol = Math.min(cols - 1, Math.floor((p.x + ringR + s - offX) / s));
-      const minRow = Math.max(0, Math.floor((p.y - ringR - s - offY) / s));
-      const maxRow = Math.min(rows - 1, Math.floor((p.y + ringR + s - offY) / s));
-      for (let row = minRow; row <= maxRow; row++) {
-        for (let col = minCol; col <= maxCol; col++) {
-          const i = row * cols + col;
-          const dist = Math.hypot(offX + col * s + half - p.x, offY + row * s + half - p.y);
-          if (Math.abs(dist - ringR) < half && o.maxOpacity > alphas[i]) {
-            alphas[i] = o.maxOpacity;
-            touched[i] = now;
-          }
-        }
-      }
+      if (ringR > Math.hypot(w, h) + o.cellSize) { pulses.splice(pi, 1); continue; }
+      pulseSegments(p, ringR, now);
     }
 
-    let anyLit = pulses.length > 0;
-    const fadeStep = (dt / Math.max(o.fadeDuration, 16)) * o.maxOpacity;
-    ctx.lineWidth = o.lineWidth;
-
-    for (let i = 0; i < alphas.length; i++) {
-      let a = alphas[i];
-      if (a <= 0) continue;
-      if (now - touched[i] > o.holdTime) {
-        a = Math.max(0, a - fadeStep);
-        alphas[i] = a;
-        if (a <= 0) continue;
-      }
-      anyLit = true;
-
-      const cx = offX + (i % cols) * s + half;
-      const cy = offY + Math.floor(i / cols) * s + half;
-      const grad = ctx.createRadialGradient(cx, cy, half * 0.1, cx, cy, s);
-      grad.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${a})`);
-      grad.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
-      ctx.strokeStyle = grad;
-      ctx.strokeRect(cx - half + 0.5, cy - half + 0.5, s - 1, s - 1);
+    const step = (dt / Math.max(o.fadeDuration, 16)) * o.maxOpacity;
+    const vLit = fade(vLevel, vTouched, vN, now, step);
+    const hLit = fade(hLevel, hTouched, hN, now, step);
+    if (glow.level > 0 && now - glow.touched > o.holdTime) {
+      glow.level = Math.max(0, glow.level - dt / Math.max(o.fadeDuration, 16));
     }
 
-    if (anyLit && !document.hidden) {
+    paint();
+
+    if ((vLit || hLit || glow.level > 0 || pulses.length) && !document.hidden) {
       raf = requestAnimationFrame(draw);
     } else {
       running = false;   // idle: the last frame (lattice only) stays on screen
@@ -206,7 +261,7 @@ export function initCursorGrid(banner, options = {}) {
   }
 
   function localPoint(e) {
-    const rect = banner.getBoundingClientRect();
+    const rect = canvas.getBoundingClientRect();
     return [e.clientX - rect.left, e.clientY - rect.top];
   }
 
@@ -226,55 +281,54 @@ export function initCursorGrid(banner, options = {}) {
   function onVisibility() {
     if (document.hidden) {
       stop();
-    } else {
-      // Resume only if something is still lit
-      if (pulses.length || alphas.some(a => a > 0)) wake();
+    } else if (pulses.length || glow.level > 0 || vLevel.some(a => a > 0) || hLevel.some(a => a > 0)) {
+      wake();   // resume only if something is still lit
     }
   }
 
-  function paintStatic() {
-    ctx.clearRect(0, 0, w, h);
-    drawLattice();
+  function clearLit() {
+    vLevel.fill(0); hLevel.fill(0);
+    glow.level = 0;
+    pulses.length = 0;
   }
 
   const resizeObserver = new ResizeObserver(() => {
     rebuild();
-    paintStatic();
+    paint();
   });
 
   // Interactive mode vs reduced-motion mode, switchable at runtime.
   function applyMotionPreference() {
     if (motionQuery.matches) {
       if (listening) {
-        banner.removeEventListener('pointermove', onPointerMove);
-        banner.removeEventListener('pointerdown', onPointerDown);
+        target.removeEventListener('pointermove', onPointerMove);
+        target.removeEventListener('pointerdown', onPointerDown);
         document.removeEventListener('visibilitychange', onVisibility);
         listening = false;
       }
       stop();
-      alphas.fill(0);
-      pulses.length = 0;
-      paintStatic();
+      clearLit();
+      paint();
     } else if (!listening) {
-      banner.addEventListener('pointermove', onPointerMove);
-      banner.addEventListener('pointerdown', onPointerDown);
+      target.addEventListener('pointermove', onPointerMove);
+      target.addEventListener('pointerdown', onPointerDown);
       document.addEventListener('visibilitychange', onVisibility);
       listening = true;
     }
   }
 
   rebuild();
-  paintStatic();
+  paint();
   applyMotionPreference();
   motionQuery.addEventListener('change', applyMotionPreference);
-  resizeObserver.observe(banner);
+  resizeObserver.observe(canvas);
 
   return function destroy() {
     stop();
     resizeObserver.disconnect();
     motionQuery.removeEventListener('change', applyMotionPreference);
-    banner.removeEventListener('pointermove', onPointerMove);
-    banner.removeEventListener('pointerdown', onPointerDown);
+    target.removeEventListener('pointermove', onPointerMove);
+    target.removeEventListener('pointerdown', onPointerDown);
     document.removeEventListener('visibilitychange', onVisibility);
     listening = false;
     canvas.remove();

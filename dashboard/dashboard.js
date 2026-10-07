@@ -258,9 +258,9 @@ function renderResult(result) {
 document.addEventListener('DOMContentLoaded', () => {
   initTabs();
 
-  // Decorative banner background. It lives as long as the page, so the
-  // cleanup function it returns is not needed here.
-  initCursorGrid(el('site-banner'));
+  // Decorative page background, tracking the pointer over the whole page. It
+  // lives as long as the page, so the cleanup function it returns is not needed.
+  initCursorGrid(document.body, { target: document });
 
   const params = new URLSearchParams(window.location.search);
   const tabId  = parseInt(params.get('tabId'));

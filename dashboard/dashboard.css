@@ -27,7 +27,9 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 16px 24px;
-  background: var(--surface);
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
@@ -99,33 +101,26 @@ body {
 }
 
 /* --- SITE BANNER --- */
+/* No background of its own, so the page grid shows behind it. */
 .site-banner {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 20px 24px;
-  background: var(--surface);
   border-bottom: 1px solid var(--border);
-  position: relative;
-  overflow: hidden; /* clips the grid canvas */
 }
 
-/* Decorative grid (dashboard/cursor-grid.js). It sits behind the text and
-   never takes pointer events, so the Rescan button, links and text selection
-   work as normal. */
+/* Full-page grid (dashboard/cursor-grid.js). Fixed behind all content and
+   never takes pointer events, so clicks and text selection work as normal.
+   Cards keep solid backgrounds, so the grid shows in the gaps and behind the
+   header, banner and tab strip. */
 .cursor-grid-canvas {
-  position: absolute;
+  position: fixed;
   inset: 0;
   width: 100%;
   height: 100%;
   pointer-events: none;
-  z-index: 0;
-}
-
-.site-banner > .site-info,
-.site-banner > .score-display {
-  position: relative;
-  z-index: 1;
+  z-index: -1;
 }
 
 .site-domain {
@@ -200,7 +195,6 @@ body {
   display: flex;
   gap: 6px;
   padding: 8px 24px; /* room for the focus ring, which overflow-x would clip */
-  background: var(--surface);
   border-bottom: 1px solid var(--border);
   overflow-x: auto;
   scrollbar-width: thin;
