@@ -1,6 +1,6 @@
 // dashboard/dashboard.js
 import { generateExplanation } from '../explanation/explanation-engine.js';
-import { getRiskLevel, getRiskColor, getCategoryLevel, getCategoryLabel, createEl } from '../utils/helpers.js';
+import { getRiskLevel, getCategoryLevel, getCategoryLabel, createEl } from '../utils/helpers.js';
 
 // =====================
 // UTILITIES
@@ -103,7 +103,7 @@ function renderCategoryCard(name, score, maxScore) {
   const barEl = el(`ov-${name}-bar`);
   if (barEl) {
     barEl.style.width = `${pct}%`;
-    barEl.style.background = getRiskColor(level);
+    barEl.className = `card-bar-fill ${level}`;
   }
 }
 
