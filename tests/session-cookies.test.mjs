@@ -19,7 +19,8 @@ function test(name, fn) {
 // ---- classifySessionCookie ----------------------------------------------
 
 const KNOWN = ['JSESSIONID', 'PHPSESSID', 'ASP.NET_SessionId', 'connect.sid', 'myapp_session', 'sessionid'];
-const NOT_SESSION = ['SIDCC', 'activitySessionId', '_ga', 'consideration', 'insider_pref'];
+const MAYBE = ['session', 'app-session-token', 'auth_token', 'access_token', 'refresh_token', 'login_token'];
+const NOT_SESSION = ['SIDCC', 'activitySessionId', '_ga', 'consideration', 'insider_pref', 'csrf_token', 'token', 'authority'];
 
 for (const name of KNOWN) {
   test(`${name} is a known session cookie`, () => {
@@ -33,10 +34,11 @@ for (const name of NOT_SESSION) {
   });
 }
 
-test('whole-word "session" names are only a "maybe"', () => {
-  assert.equal(classifySessionCookie('session'), 'maybe');
-  assert.equal(classifySessionCookie('app-session-token'), 'maybe');
-});
+for (const name of MAYBE) {
+  test(`${name} may be a session cookie ("maybe")`, () => {
+    assert.equal(classifySessionCookie(name), 'maybe');
+  });
+}
 
 // ---- analyzeSecurity: evidence decides the verdict flag -----------------
 
@@ -95,6 +97,26 @@ test('"maybe" cookie with a login form: caution + penalty, honest wording', () =
   assert.match(found[0].text, /may be session cookies/);
   assert.equal(r.score, 23);
 });
+
+for (const name of ['auth_token', 'access_token', 'refresh_token', 'login_token']) {
+  test(`${name} without a login form: informational only`, () => {
+    const r = analyzeSecurity(page({ cookies: [{ name, secure: true, httpOnly: false }] }));
+    const found = cookieFindings(r);
+    assert.equal(found.length, 1);
+    assert.equal(found[0].type, 'neutral');
+    assert.ok(!r.findings.some(f => f.caution));
+    assert.equal(r.score, 25);
+  });
+
+  test(`${name} with a login form: caution + penalty`, () => {
+    const r = analyzeSecurity(page({
+      cookies: [{ name, secure: true, httpOnly: false }],
+      hasPasswordField: true
+    }));
+    assert.ok(r.findings.some(f => f.caution && /may be session cookies/.test(f.text)));
+    assert.equal(r.score, 23);
+  });
+}
 
 test('cookie values are never read or reported', () => {
   const r = analyzeSecurity(page({

@@ -20,15 +20,20 @@ const KNOWN_SESSION_PATTERNS = [
   /_session$/             // framework convention: myapp_session
 ];
 const SESSION_WORDS = new Set(['session', 'sessionid']);
+// "<prefix>_token" as separate words: auth_token, access_token, refresh_token, login_token
+const TOKEN_PREFIXES = new Set(['auth', 'access', 'refresh', 'login']);
 
 // 'known' → a well-known session cookie name
-// 'maybe' → "session" appears as a whole word, but the name is not a known one
+// 'maybe' → "session", or an auth/access/refresh/login token, appears as whole
+//           words, but the name is not a known session name
 // null    → not treated as a session cookie
 export function classifySessionCookie(name) {
   // __Host- / __Secure- are cookie-name prefixes, not part of the name itself
   const n = String(name || '').toLowerCase().replace(/^__(host|secure)-/, '');
   if (KNOWN_SESSION_NAMES.has(n) || KNOWN_SESSION_PATTERNS.some(p => p.test(n))) return 'known';
-  if (n.split(/[_\-.:]/).some(word => SESSION_WORDS.has(word))) return 'maybe';
+  const words = n.split(/[_\-.:]/);
+  if (words.some(w => SESSION_WORDS.has(w))) return 'maybe';
+  if (words.some((w, i) => w === 'token' && TOKEN_PREFIXES.has(words[i - 1]))) return 'maybe';
   return null;
 }
 
