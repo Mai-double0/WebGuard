@@ -1,6 +1,7 @@
 // dashboard/dashboard.js
 import { generateExplanation } from '../explanation/explanation-engine.js';
-import { getRiskLevel, getRiskColor, getCategoryLevel, getCategoryLabel, createEl } from '../utils/helpers.js';
+import { initCursorGrid } from './cursor-grid.js';
+import { getRiskLevel, getCategoryLevel, getCategoryLabel, createEl } from '../utils/helpers.js';
 
 // =====================
 // UTILITIES
@@ -103,7 +104,7 @@ function renderCategoryCard(name, score, maxScore) {
   const barEl = el(`ov-${name}-bar`);
   if (barEl) {
     barEl.style.width = `${pct}%`;
-    barEl.style.background = getRiskColor(level);
+    barEl.className = `card-bar-fill ${level}`;
   }
 }
 
@@ -257,6 +258,10 @@ function renderResult(result) {
 document.addEventListener('DOMContentLoaded', () => {
   initTabs();
 
+  // Decorative page background, tracking the pointer over the whole page. It
+  // lives as long as the page, so the cleanup function it returns is not needed.
+  initCursorGrid(document.body, { target: document });
+
   const params = new URLSearchParams(window.location.search);
   const tabId  = parseInt(params.get('tabId'));
 
@@ -313,7 +318,9 @@ document.addEventListener('DOMContentLoaded', () => {
   tryLoad();
 
   // Rescan button
-  el('btn-rescan')?.addEventListener('click', () => {
+  const rescanBtn = el('btn-rescan');
+  rescanBtn?.addEventListener('click', () => {
+    rescanBtn.classList.add('is-rescanning');   // the page reloads when the rescan is done
     chrome.runtime.sendMessage({ type: 'RESCAN', tabId }, () => {
       // Drop the popup's snapshot so the reload shows the new scan
       chrome.storage.session.remove(`webguard_result_${tabId}`, () => {

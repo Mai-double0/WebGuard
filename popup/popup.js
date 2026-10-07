@@ -240,7 +240,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   // =====================
   // BUTTON: Rescan
   // =====================
-  el('btn-rescan').addEventListener('click', () => {
+  const rescanBtn = el('btn-rescan');
+  rescanBtn.addEventListener('click', () => {
+    rescanBtn.classList.add('is-rescanning');
+    const done = () => rescanBtn.classList.remove('is-rescanning');
     renderScanning();
     setText('site-domain', new URL(tabUrl).hostname || tabUrl);
     setText('site-url', tabUrl);
@@ -253,6 +256,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           chrome.runtime.sendMessage(
             { type: 'GET_SCAN_RESULT', tabId },
             (resp) => {
+              done();
               const r = resp?.result;
               if (r && r.status === 'complete') renderResult(r);
               else if (r && r.status === 'error') renderError(r.error);

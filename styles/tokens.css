@@ -1,0 +1,24 @@
+/* WebGuard colour tokens, shared by the popup and the dashboard.
+   Palette: Warm stone + Orchid */
+:root {
+  --bg:           #141211;  /* page background */
+  --surface:      #1d1b19;  /* header, banner, cards */
+  --raised:       #292623;  /* buttons, pills, tags, bar tracks */
+  --border:       #45403a;
+  --glass:        #141211d9;  /* --bg at 85%: sticky header over the page grid */
+  --text:         #f5f2ee;
+  --muted:        #aca69e;
+
+  --accent:       #e879f9;  /* accent as text, borders, fills */
+  --accent-hover: #f0abfc;
+  --on-accent:    #1f0a23;  /* text and marks on an accent fill */
+  --accent-tint:  #392838;  /* notes and banners tinted with the accent */
+
+  /* Risk / verdict colours: meaning is fixed across palettes.
+     -fg: text on dark surfaces; base: borders and bars; -bg: verdict panel (no orange: verdicts are ok, caution, no); -badge: risk pill. */
+  --green:  #22c55e;  --green-fg:  #4ade80;  --green-bg:  #0f2e1c;  --green-badge:  #14532d;
+  --yellow: #eab308;  --yellow-fg: #fbbf24;  --yellow-bg: #3a2e0b;  --yellow-badge: #713f12;
+  --orange: #f97316;  --orange-fg: #fb923c;  --orange-badge: #612709;
+  --red:    #ef4444;  --red-fg:    #f87171;  --red-bg:    #3b1212;  --red-badge:    #601515;
+}
+
