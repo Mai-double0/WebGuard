@@ -1,5 +1,6 @@
 // dashboard/dashboard.js
 import { generateExplanation } from '../explanation/explanation-engine.js';
+import { initCursorGrid } from './cursor-grid.js';
 import { getRiskLevel, getCategoryLevel, getCategoryLabel, createEl } from '../utils/helpers.js';
 
 // =====================
@@ -256,6 +257,10 @@ function renderResult(result) {
 
 document.addEventListener('DOMContentLoaded', () => {
   initTabs();
+
+  // Decorative banner background. It lives as long as the page, so the
+  // cleanup function it returns is not needed here.
+  initCursorGrid(el('site-banner'));
 
   const params = new URLSearchParams(window.location.search);
   const tabId  = parseInt(params.get('tabId'));
