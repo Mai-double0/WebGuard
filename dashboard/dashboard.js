@@ -23,6 +23,20 @@ function initTabs() {
   if (!tablist) return;
   const tabs = [...tablist.querySelectorAll('[role="tab"]')];
 
+  // Pill structure: a fill circle plus a two-line label stack. The duplicate
+  // "hover" label slides in as the first one slides out; it is aria-hidden so
+  // assistive tech only reads the label once.
+  tabs.forEach(tab => {
+    const text = tab.textContent.trim();
+    const circle = createEl('span', 'hover-circle');
+    circle.setAttribute('aria-hidden', 'true');
+    const hoverLabel = createEl('span', 'pill-label-hover', text);
+    hoverLabel.setAttribute('aria-hidden', 'true');
+    const stack = createEl('span', 'label-stack');
+    stack.append(createEl('span', 'pill-label', text), hoverLabel);
+    tab.replaceChildren(circle, stack);
+  });
+
   // Automatic activation: selecting a tab shows its panel immediately.
   // Roving tabindex keeps only the selected tab in the page's Tab order.
   function select(tab, { focus = false } = {}) {
