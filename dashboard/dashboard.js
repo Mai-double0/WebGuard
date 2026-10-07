@@ -19,17 +19,38 @@ function formatTime(ts) {
 // =====================
 
 function initTabs() {
-  const buttons = document.querySelectorAll('.tab-btn');
-  const panels  = document.querySelectorAll('.tab-panel');
-  buttons.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const target = btn.dataset.tab;
-      buttons.forEach(b => b.classList.remove('active'));
-      panels.forEach(p => p.classList.remove('active'));
-      btn.classList.add('active');
-      const panel = document.getElementById(`tab-${target}`);
-      if (panel) panel.classList.add('active');
+  const tablist = document.querySelector('[role="tablist"]');
+  if (!tablist) return;
+  const tabs = [...tablist.querySelectorAll('[role="tab"]')];
+
+  // Automatic activation: selecting a tab shows its panel immediately.
+  // Roving tabindex keeps only the selected tab in the page's Tab order.
+  function select(tab, { focus = false } = {}) {
+    tabs.forEach(t => {
+      const on = t === tab;
+      t.setAttribute('aria-selected', String(on));
+      t.tabIndex = on ? 0 : -1;
+      const panel = document.getElementById(t.getAttribute('aria-controls'));
+      if (panel) panel.hidden = !on;
     });
+    if (focus) tab.focus();
+  }
+
+  tabs.forEach(tab => tab.addEventListener('click', () => select(tab)));
+
+  tablist.addEventListener('keydown', (e) => {
+    const i = tabs.indexOf(document.activeElement);
+    if (i === -1) return;
+    const last = tabs.length - 1;
+    const next = {
+      ArrowRight: i === last ? 0 : i + 1,
+      ArrowLeft:  i === 0 ? last : i - 1,
+      Home: 0,
+      End: last,
+    }[e.key];
+    if (next === undefined) return;
+    e.preventDefault();
+    select(tabs[next], { focus: true });
   });
 }
 
