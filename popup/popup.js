@@ -17,6 +17,30 @@ function setText(id, text) {
   if (e) e.textContent = text;
 }
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+// Icons are built with DOM APIs (no innerHTML). The verdict icons are filled shapes,
+// so each state also differs in shape, not just colour.
+const VERDICT_ICONS = {
+  no:      [['circle', { cx: 12, cy: 12, r: 10, class: 'vi-shape' }], ['rect', { x: 6.5, y: 10.25, width: 11, height: 3.5, rx: 1.75, class: 'vi-mark' }]],
+  caution: [['path', { d: 'M12 3.4 21.2 20H2.8z', class: 'vi-shape' }], ['rect', { x: 11, y: 9, width: 2, height: 6, rx: 1, class: 'vi-mark' }], ['circle', { cx: 12, cy: 17.4, r: 1.2, class: 'vi-mark' }]],
+  ok:      [['circle', { cx: 12, cy: 12, r: 10, class: 'vi-shape' }], ['path', { d: 'm7.5 12.4 3 3 6-6.8', class: 'vi-stroke' }]]
+};
+
+function svgIcon(className, nodes) {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('class', className);
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('focusable', 'false');
+  for (const [tag, attrs] of nodes) {
+    const node = document.createElementNS(SVG_NS, tag);
+    for (const [name, value] of Object.entries(attrs)) node.setAttribute(name, value);
+    svg.append(node);
+  }
+  return svg;
+}
+
 function findingItem(type, icon, text) {
   const li = createEl('li', `finding-item ${type}`);
   li.append(createEl('span', 'finding-icon', icon), createEl('span', 'finding-text', text));
@@ -79,7 +103,9 @@ function renderResult(result) {
   renderVerdict(result.verdict);
 
   // Show limited analysis note if applicable (and hide it again after a full rescan)
-  el('limited-note')?.classList.toggle('hidden', !result.pageData?.limitedAnalysis);
+  const limited = !!result.pageData?.limitedAnalysis;
+  el('limited-note')?.classList.toggle('hidden', !limited);
+  document.body.classList.toggle('is-limited', limited);
 
   // Category scores
   if (categories) {
@@ -123,15 +149,23 @@ function renderVerdict(verdict) {
   const box = el('verdict');
   if (!box) return;
 
-  const levels = { no: '⛔', caution: '⚠', ok: '✓' };
-  if (!verdict || !levels[verdict.level]) {
+  if (!verdict || !VERDICT_ICONS[verdict.level]) {
     box.className = 'verdict hidden';
     return;
   }
 
-  box.className = `verdict ${verdict.level}`;
-  setText('verdict-label', `${levels[verdict.level]} ${verdict.label}`);
-  setText('verdict-reason', (verdict.reasons || [])[0] || '');
+  // Two reasons share the space, so each is clamped tighter (full text in the tooltip).
+  const multi = (verdict.reasons || []).length > 1 ? ' multi' : '';
+  box.className = `verdict ${verdict.level}${multi}`;
+  const icon = svgIcon('verdict-icon', VERDICT_ICONS[verdict.level]);
+  el('verdict-icon').replaceChildren(icon);
+  setText('verdict-label', verdict.label || '');
+  el('verdict-reasons').replaceChildren(
+    ...(verdict.reasons || []).slice(0, 2).map(r => {
+      const p = createEl('p', 'verdict-reason', r);
+      p.title = r;
+      return p;
+    }));
 }
 
 function renderFindings(findings) {
