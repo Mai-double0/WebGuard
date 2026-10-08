@@ -482,6 +482,55 @@ body.is-limited .verdict.multi .verdict-reason {
   to { transform: rotate(360deg); }
 }
 
+/* --- LOADING SKELETON ---
+   While scanning the real elements stay in place (so nothing jumps when the
+   result arrives) but render as empty grey blocks that pulse. */
+body.is-scanning .score-number,
+body.is-scanning .risk-badge,
+body.is-scanning .category-score,
+body.is-scanning .category-level,
+body.is-scanning .cat-bar,
+body.is-scanning .verdict-icon-slot::before,
+body.is-scanning .verdict-label,
+body.is-scanning .verdict-reason,
+.finding-item.skeleton .finding-icon-ph,
+.finding-item.skeleton .finding-text-ph {
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+body.is-scanning .score-number,
+body.is-scanning .risk-badge,
+body.is-scanning .category-score,
+body.is-scanning .category-level,
+body.is-scanning .verdict-label,
+body.is-scanning .verdict-reason,
+body.is-scanning .verdict-icon-slot::before,
+.finding-item.skeleton .finding-icon-ph,
+.finding-item.skeleton .finding-text-ph {
+  background: var(--border);
+  border-radius: 6px;
+}
+
+body.is-scanning .score-number { width: 84px; height: 48px; }
+body.is-scanning .risk-badge   { width: 116px; height: 28px; }
+body.is-scanning .category-score { width: 36px; height: 12px; justify-self: end; color: transparent; }
+body.is-scanning .category-level { width: 56px; height: 12px; justify-self: end; color: transparent; }
+body.is-scanning .score-label  { visibility: hidden; }
+
+body.is-scanning .verdict-icon-slot::before { content: ''; width: 28px; height: 28px; border-radius: 50%; }
+body.is-scanning .verdict-label  { width: 60%; height: 14px; margin-top: 3px; }
+body.is-scanning .verdict-reason { width: 100%; height: 12px; }
+body.is-scanning .verdict-reason:last-child { width: 70%; }
+
+.finding-item.skeleton .finding-icon-ph { flex: none; width: 16px; height: 16px; border-radius: 50%; margin-top: 1px; }
+.finding-item.skeleton .finding-text-ph { height: 12px; margin-top: 3px; width: 90%; }
+.finding-item.skeleton.short .finding-text-ph { width: 65%; }
+
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.5; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation: none !important;

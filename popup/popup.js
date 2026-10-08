@@ -17,10 +17,20 @@ function setText(id, text) {
   if (e) e.textContent = text;
 }
 
+// Findings shown in the popup; the rest are in the full analysis.
+const MAX_FINDINGS = 4;
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
-// Icons are built with DOM APIs (no innerHTML). The verdict icons are filled shapes,
-// so each state also differs in shape, not just colour.
+// Icons are built with DOM APIs (no innerHTML). Finding icons share one
+// outline style; the verdict icons are filled shapes so each state also differs in shape.
+const FINDING_ICONS = {
+  positive: [['circle', { cx: 12, cy: 12, r: 9 }], ['path', { d: 'm8 12 3 3 5-6' }]],
+  warning:  [['path', { d: 'M12 3.5 2.8 19.5h18.4z' }], ['path', { d: 'M12 10v4' }], ['path', { d: 'M12 17h.01' }]],
+  danger:   [['circle', { cx: 12, cy: 12, r: 9 }], ['path', { d: 'm9.2 9.2 5.6 5.6M14.8 9.2l-5.6 5.6' }]],
+  neutral:  [['circle', { cx: 12, cy: 12, r: 9 }], ['path', { d: 'M12 11v5' }], ['path', { d: 'M12 8h.01' }]]
+};
+
 const VERDICT_ICONS = {
   no:      [['circle', { cx: 12, cy: 12, r: 10, class: 'vi-shape' }], ['rect', { x: 6.5, y: 10.25, width: 11, height: 3.5, rx: 1.75, class: 'vi-mark' }]],
   caution: [['path', { d: 'M12 3.4 21.2 20H2.8z', class: 'vi-shape' }], ['rect', { x: 11, y: 9, width: 2, height: 6, rx: 1, class: 'vi-mark' }], ['circle', { cx: 12, cy: 17.4, r: 1.2, class: 'vi-mark' }]],
@@ -41,13 +51,6 @@ function svgIcon(className, nodes) {
   return svg;
 }
 
-const FINDING_ICONS = {
-  positive: [['circle', { cx: 12, cy: 12, r: 9 }], ['path', { d: 'm8 12 3 3 5-6' }]],
-  warning:  [['path', { d: 'M12 3.5 2.8 19.5h18.4z' }], ['path', { d: 'M12 10v4' }], ['path', { d: 'M12 17h.01' }]],
-  danger:   [['circle', { cx: 12, cy: 12, r: 9 }], ['path', { d: 'm9.2 9.2 5.6 5.6M14.8 9.2l-5.6 5.6' }]],
-  neutral:  [['circle', { cx: 12, cy: 12, r: 9 }], ['path', { d: 'M12 11v5' }], ['path', { d: 'M12 8h.01' }]]
-};
-
 function findingItem(type, text) {
   const kind = FINDING_ICONS[type] ? type : 'neutral';
   const li = createEl('li', `finding-item ${kind}`);
@@ -57,8 +60,16 @@ function findingItem(type, text) {
   return li;
 }
 
-// Findings shown in the popup; the rest are in the full analysis.
-const MAX_FINDINGS = 4;
+function skeletonFinding(short) {
+  const li = createEl('li', `finding-item skeleton${short ? ' short' : ''}`);
+  li.append(createEl('span', 'finding-icon-ph'), createEl('span', 'finding-text-ph'));
+  return li;
+}
+
+function setScanning(on) {
+  document.body.classList.toggle('is-scanning', on);
+  if (on) document.body.classList.remove('is-limited');
+}
 
 // =====================
 // RENDER FUNCTIONS
@@ -66,37 +77,47 @@ const MAX_FINDINGS = 4;
 
 const CATEGORIES = ['security', 'privacy', 'phishing', 'resources'];
 
+function announce(text) {
+  setText('sr-status', text);
+}
+
 function renderScanning() {
+  setScanning(true);
+  announce('Scanning this page');
   setText('site-domain', 'Scanning...');
   setText('site-url', '');
-  setText('score-number', '--');
-  setText('risk-label', 'Please wait');
+  setText('score-number', '');
+  setText('risk-label', '');
+  el('score-number').className = 'score-number';
   el('risk-badge').className = 'risk-badge';
 
   resetCategories();
+  renderVerdictSkeleton();
 
-  el('findings-list').replaceChildren(findingItem('neutral', 'Analysis in progress...'));
-
-    renderVerdict(null);
+  el('findings-list').replaceChildren(skeletonFinding(false), skeletonFinding(true), skeletonFinding(false));
   el('findings-more').classList.add('hidden');
 }
 
 function renderError(message) {
+  setScanning(false);
+  announce(message || 'This page cannot be scanned.');
   setText('site-domain', 'Unable to analyze');
   setText('site-url', message || 'This page cannot be scanned.');
   setText('score-number', '?');
   setText('risk-label', 'UNAVAILABLE');
+  el('score-number').className = 'score-number';
   el('risk-badge').className = 'risk-badge';
 
   resetCategories();
+  renderVerdict(null);
+
   el('findings-list').replaceChildren(findingItem('neutral', message || 'Page could not be analyzed.'));
   el('findings-more').classList.add('hidden');
-
-    renderVerdict(null);
 }
 
 function renderResult(result) {
   const { score, riskLevel, riskLabel, domain, url, findings, categories } = result;
+  setScanning(false);
 
   // Site info
   setText('site-domain', domain || 'Unknown');
@@ -112,6 +133,7 @@ function renderResult(result) {
   badge.className = `risk-badge ${riskLevel}`;
   setText('risk-label', riskLabel);
   renderVerdict(result.verdict);
+  announce(`${riskLabel}, score ${score} of 100. ${result.verdict?.label || ''}`.trim());
 
   // Show limited analysis note if applicable (and hide it again after a full rescan)
   const limited = !!result.pageData?.limitedAnalysis;
@@ -170,6 +192,15 @@ function resetCategory(name) {
   bar.className = 'cat-bar-fill';
   el(`cat-${name}-meter`).removeAttribute('aria-valuenow');
 }
+
+// Same shape as a real verdict, drawn as grey placeholders while scanning.
+function renderVerdictSkeleton() {
+  el('verdict').className = 'verdict';
+  el('verdict-icon').replaceChildren();
+  setText('verdict-label', '');
+  el('verdict-reasons').replaceChildren(createEl('p', 'verdict-reason'), createEl('p', 'verdict-reason'));
+}
+
 function renderVerdict(verdict) {
   const box = el('verdict');
   if (!box) return;

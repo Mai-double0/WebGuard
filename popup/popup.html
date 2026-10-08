@@ -9,6 +9,9 @@
 </head>
 <body>
 
+  <!-- Screen-reader announcements (scan started / finished) -->
+  <div class="sr-only" id="sr-status" role="status" aria-live="polite"></div>
+
   <!-- HEADER -->
   <header class="header">
     <div class="header-left">
@@ -31,7 +34,7 @@
 
   <main class="main">
 
-  <!-- OVERALL SCORE -->
+    <!-- OVERALL SCORE -->
     <section class="score-section" aria-label="Overall score">
       <div class="score-circle">
         <div class="score-number" id="score-number"></div>
@@ -42,7 +45,7 @@
       </div>
     </section>
 
-  <!-- TRUST VERDICT -->
+    <!-- TRUST VERDICT -->
     <section class="verdict hidden" id="verdict" aria-label="Trust verdict">
       <span class="verdict-icon-slot" id="verdict-icon"></span>
       <div class="verdict-body">
@@ -51,7 +54,7 @@
       </div>
     </section>
 
-  <!-- CATEGORY BREAKDOWN -->
+    <!-- CATEGORY BREAKDOWN -->
     <section class="categories" aria-label="Category scores">
       <div class="category-row">
         <span class="category-icon" aria-hidden="true">🔐</span>
@@ -83,7 +86,7 @@
       </div>
     </section>
 
-  <!-- KEY FINDINGS -->
+    <!-- KEY FINDINGS -->
     <section class="findings" aria-label="Key findings">
       <h2 class="findings-title">Key Findings</h2>
       <div class="findings-scroll">
