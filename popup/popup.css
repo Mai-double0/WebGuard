@@ -1,5 +1,7 @@
 /* =====================
    WEBGUARD POPUP STYLES
+   Fixed 360px width. Hierarchy: score + risk + verdict, then category
+   rows, then key findings, then the footer actions.
    ===================== */
 
 *, *::before, *::after {
@@ -10,11 +12,15 @@
 
 :root {
   --radius:        8px;
+  --gutter:        16px;
 }
 
 body {
   width: 360px;
   min-height: 480px;
+  max-height: 600px;   /* Chrome's popup limit: past this only the findings list scrolls */
+  display: flex;
+  flex-direction: column;
   background: var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -22,14 +28,48 @@ body {
   line-height: 1.5;
 }
 
+.main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px var(--gutter) 0;
+}
+
+/* Everything above the findings is fixed; only the findings list scrolls. */
+.main > * {
+  flex: none;
+}
+
+.main > .findings {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* Visually hidden, still announced by screen readers. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* --- HEADER --- */
 .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
+  padding: 8px var(--gutter);
   background: var(--surface);
-  border-bottom: 1px solid var(--border);
 }
 
 .header-left {
@@ -39,8 +79,8 @@ body {
 }
 
 .logo {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
 }
 
 .brand {
@@ -57,14 +97,15 @@ body {
 
 /* --- SITE INFO --- */
 .site-info {
-  padding: 10px 16px;
+  padding: 0 var(--gutter) 8px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
 
 .site-domain {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
+  line-height: 1.3;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
@@ -77,17 +118,26 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-top: 2px;
 }
 
-/* --- SCORE SECTION --- */
+.site-url:empty {
+  display: none;
+}
+
+.limited-note {
+  background: var(--accent-tint);
+  border-left: 3px solid var(--accent);
+  padding: 6px var(--gutter);
+  font-size: 11px;
+  color: var(--text);
+}
+
+/* --- SCORE SECTION (the focus) --- */
 .score-section {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  padding: 20px 16px 14px;
-  background: var(--bg);
-  gap: 10px;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .score-circle {
@@ -97,21 +147,22 @@ body {
 }
 
 .score-number {
-  font-size: 52px;
+  font-size: 48px;
   font-weight: 800;
   line-height: 1;
+  font-variant-numeric: tabular-nums;
   color: var(--text);
   transition: color 0.3s;
 }
 
 .score-label {
-  font-size: 18px;
+  font-size: 16px;
   color: var(--muted);
 }
 
 .risk-badge {
   display: inline-block;
-  padding: 4px 16px;
+  padding: 6px 14px;
   border-radius: 20px;
   font-size: 12px;
   font-weight: 700;
@@ -136,20 +187,107 @@ body {
 .score-number.high      { color: var(--orange-fg); }
 .score-number.critical  { color: var(--red-fg); }
 
+/* --- TRUST VERDICT --- */
+.verdict {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.verdict-icon-slot {
+  flex: none;
+  display: flex;
+}
+
+.verdict-icon {
+  width: 28px;
+  height: 28px;
+}
+
+.verdict-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.verdict-label {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.verdict-reasons {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.verdict.multi .verdict-reason {
+  -webkit-line-clamp: 2;
+}
+
+/* The limited-analysis note takes two lines, so claw them back here to keep the findings in view. */
+body.is-limited .verdict.multi .verdict-reason {
+  -webkit-line-clamp: 1;
+}
+
+.verdict-reasons:empty {
+  display: none;
+}
+
+.verdict-reason {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+/* Each state gets its own icon shape (circle bar, triangle, check) as well
+   as its own colour, so it never relies on colour alone. */
+.verdict.no      { --vc: var(--red);    --vfg: var(--red-fg);    border-color: var(--red);    background: var(--red-bg); }
+.verdict.caution { --vc: var(--yellow); --vfg: var(--yellow-fg); border-color: var(--yellow); background: var(--yellow-bg); }
+.verdict.ok      { --vc: var(--green);  --vfg: var(--green-fg);  border-color: var(--green);  background: var(--green-bg); }
+.verdict-label { color: var(--vfg, var(--text)); }
+
+.vi-shape {
+  fill: var(--vc);
+  stroke: var(--vc);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.vi-mark   { fill: var(--bg); }
+
+.vi-stroke {
+  fill: none;
+  stroke: var(--bg);
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 /* --- CATEGORIES --- */
 .categories {
-  padding: 8px 16px;
+  padding: 4px 12px;
   background: var(--surface);
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
 }
 
 .category-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 20px 66px 1fr 40px 66px;
   align-items: center;
-  padding: 7px 0;
+  column-gap: 8px;
+  padding: 6px 0;
   border-bottom: 1px solid var(--raised);
-  gap: 8px;
 }
 
 .category-row:last-child {
@@ -158,29 +296,28 @@ body {
 
 .category-icon {
   font-size: 14px;
-  width: 20px;
   text-align: center;
 }
 
 .category-name {
-  flex: 1;
   font-size: 13px;
   color: var(--text);
 }
 
 .category-score {
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
   color: var(--muted);
-  width: 40px;
   text-align: right;
 }
 
 .category-level {
   font-size: 11px;
-  font-weight: 600;
-  width: 60px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
   text-align: right;
   text-transform: uppercase;
+  color: var(--muted);
 }
 
 .category-level.very-low, .category-level.low { color: var(--green-fg); }
@@ -188,11 +325,27 @@ body {
 .category-level.high      { color: var(--orange-fg); }
 .category-level.critical  { color: var(--red-fg); }
 
-/* --- FINDINGS --- */
-.findings {
-  padding: 10px 16px;
+/* Progress bar: same look as the dashboard cards, with a thicker track. */
+.cat-bar {
+  height: 6px;
+  background: var(--raised);
+  border-radius: 3px;
+  overflow: hidden;
 }
 
+.cat-bar-fill {
+  width: 0;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--green);
+  transition: width 0.4s ease;
+}
+
+.cat-bar-fill.moderate { background: var(--yellow); }
+.cat-bar-fill.high     { background: var(--orange); }
+.cat-bar-fill.critical { background: var(--red); }
+
+/* --- FINDINGS --- */
 .findings-title {
   font-size: 11px;
   font-weight: 700;
@@ -202,11 +355,33 @@ body {
   margin-bottom: 8px;
 }
 
+.findings-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+/* The scroll area is keyboard-focusable in Chrome; give it the same ring as the buttons. */
+.findings-scroll:focus-visible {
+  outline: 2px solid var(--accent-hover);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Breathing room under the last finding (inside the scroll area, so the list clears the footer). */
+.findings-scroll::after {
+  content: '';
+  display: block;
+  height: 12px;
+}
+
 .findings-list {
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 8px;
 }
 
 .finding-item {
@@ -214,67 +389,91 @@ body {
   align-items: flex-start;
   gap: 8px;
   font-size: 12px;
+  line-height: 1.45;
   color: var(--text);
 }
 
 .finding-icon {
-  flex-shrink: 0;
-  font-size: 13px;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .finding-text {
-  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
-.finding-item.positive .finding-text { color: var(--green-fg); }
-.finding-item.warning  .finding-text { color: var(--yellow-fg); }
-.finding-item.danger   .finding-text { color: var(--red-fg); }
+.finding-item.positive .finding-icon { color: var(--green-fg); }
+.finding-item.warning  .finding-icon { color: var(--yellow-fg); }
+.finding-item.danger   .finding-icon { color: var(--red-fg); }
+.finding-item.neutral  .finding-icon { color: var(--muted); }
 .finding-item.neutral  .finding-text { color: var(--muted); }
+
+.findings-more {
+  margin-top: 8px;
+  padding-left: 24px;
+  font-size: 11px;
+  color: var(--muted);
+}
 
 /* --- FOOTER --- */
 .footer {
   display: flex;
   gap: 8px;
-  padding: 12px 16px;
+  padding: 12px var(--gutter);
   background: var(--surface);
   border-top: 1px solid var(--border);
 }
 
-.btn-full-report {
-  flex: 1;
-  padding: 8px 12px;
-  background: var(--accent);
-  color: var(--on-accent);
-  border: none;
-  border-radius: var(--radius);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.btn-full-report:hover {
-  background: var(--accent-hover);
-}
-
-.btn-rescan {
+.btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 8px 12px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: var(--radius);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--accent-hover);
+  outline-offset: 2px;
+}
+
+.btn-primary {
+  flex: 1;
+  background: var(--accent);
+  color: var(--on-accent);
+  border: 1px solid var(--accent);
+}
+
+.btn-primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.btn-secondary {
   background: var(--raised);
   color: var(--text);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s;
 }
 
-.btn-rescan:hover {
-  background: var(--border);
+.btn-secondary:hover {
+  border-color: var(--accent);
 }
 
 /* Refresh icon: sits on the text's middle line; spins while a rescan runs. */
@@ -282,7 +481,7 @@ body {
   flex-shrink: 0;
 }
 
-.btn-rescan.is-rescanning .btn-icon {
+.btn-secondary.is-rescanning .btn-icon {
   animation: btn-icon-spin 0.8s linear infinite;
 }
 
@@ -290,35 +489,58 @@ body {
   to { transform: rotate(360deg); }
 }
 
+/* --- LOADING SKELETON ---
+   While scanning the real elements stay in place (so nothing jumps when the
+   result arrives) but render as empty grey blocks that pulse. */
+body.is-scanning .score-number,
+body.is-scanning .risk-badge,
+body.is-scanning .category-score,
+body.is-scanning .category-level,
+body.is-scanning .cat-bar,
+body.is-scanning .verdict-icon-slot::before,
+body.is-scanning .verdict-label,
+body.is-scanning .verdict-reason,
+.finding-item.skeleton .finding-icon-ph,
+.finding-item.skeleton .finding-text-ph {
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+body.is-scanning .score-number,
+body.is-scanning .risk-badge,
+body.is-scanning .category-score,
+body.is-scanning .category-level,
+body.is-scanning .verdict-label,
+body.is-scanning .verdict-reason,
+body.is-scanning .verdict-icon-slot::before,
+.finding-item.skeleton .finding-icon-ph,
+.finding-item.skeleton .finding-text-ph {
+  background: var(--border);
+  border-radius: 6px;
+}
+
+body.is-scanning .score-number { width: 84px; height: 48px; }
+body.is-scanning .risk-badge   { width: 116px; height: 28px; }
+body.is-scanning .category-score { width: 36px; height: 12px; justify-self: end; color: transparent; }
+body.is-scanning .category-level { width: 56px; height: 12px; justify-self: end; color: transparent; }
+body.is-scanning .score-label  { visibility: hidden; }
+
+body.is-scanning .verdict-icon-slot::before { content: ''; width: 28px; height: 28px; border-radius: 50%; }
+body.is-scanning .verdict-label  { width: 60%; height: 14px; margin-top: 3px; }
+body.is-scanning .verdict-reason { width: 100%; height: 12px; }
+body.is-scanning .verdict-reason:last-child { width: 70%; }
+
+.finding-item.skeleton .finding-icon-ph { flex: none; width: 16px; height: 16px; border-radius: 50%; margin-top: 1px; }
+.finding-item.skeleton .finding-text-ph { height: 12px; margin-top: 3px; width: 90%; }
+.finding-item.skeleton.short .finding-text-ph { width: 65%; }
+
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.5; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .btn-rescan.is-rescanning .btn-icon { animation: none; }
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }
-
-.limited-note {
-  background: var(--accent-tint);
-  border-left: 3px solid var(--accent);
-  padding: 6px 12px;
-  font-size: 11px;
-  color: var(--accent);
-}
-
-.hidden {
-  display: none;
-}
-
-.verdict {
-  margin: 0 16px 12px;
-  padding: 10px 12px;
-  border-radius: var(--radius);
-  border-left: 3px solid var(--border);
-  background: var(--surface);
-}
-.verdict-label  { font-size: 13px; font-weight: 700; }
-.verdict-reason { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
-
-.verdict.no      { border-left-color: var(--red);    background: var(--red-bg); }
-.verdict.no .verdict-label      { color: var(--red-fg); }
-.verdict.caution { border-left-color: var(--yellow); background: var(--yellow-bg); }
-.verdict.caution .verdict-label { color: var(--yellow-fg); }
-.verdict.ok      { border-left-color: var(--green);  background: var(--green-bg); }
-.verdict.ok .verdict-label      { color: var(--green-fg); }

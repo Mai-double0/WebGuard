@@ -9,15 +9,16 @@
 </head>
 <body>
 
+  <!-- Screen-reader announcements (scan started / finished) -->
+  <div class="sr-only" id="sr-status" role="status" aria-live="polite"></div>
+
   <!-- HEADER -->
   <header class="header">
     <div class="header-left">
-      <img src="../icons/icon48.png" alt="WebGuard" class="logo" />
+      <img src="../icons/icon48.png" alt="" class="logo" />
       <span class="brand">WebGuard</span>
     </div>
-    <div class="header-right">
-      <span class="version">v1.0</span>
-    </div>
+    <span class="version">v1.0</span>
   </header>
 
   <!-- CURRENT SITE -->
@@ -27,72 +28,81 @@
   </section>
 
   <!-- LIMITED ANALYSIS NOTE -->
-  <div id="limited-note" class="limited-note hidden">
-    ⚠ Limited analysis — this site restricts content script access. URL-based assessment only.
+  <div id="limited-note" class="limited-note hidden" role="note">
+    Limited analysis — this site restricts content script access. URL-based assessment only.
   </div>
 
-  <!-- OVERALL SCORE -->
-  <section class="score-section">
-    <div class="score-circle">
-      <div class="score-number" id="score-number">--</div>
-      <div class="score-label">/ 100</div>
-    </div>
-    <div class="risk-badge" id="risk-badge">
-      <span id="risk-label">Scanning...</span>
-    </div>
-  </section>
+  <main class="main">
+
+    <!-- OVERALL SCORE -->
+    <section class="score-section" aria-label="Overall score">
+      <div class="score-circle">
+        <div class="score-number" id="score-number"></div>
+        <div class="score-label">/ 100</div>
+      </div>
+      <div class="risk-badge" id="risk-badge">
+        <span id="risk-label"></span>
+      </div>
+    </section>
 
     <!-- TRUST VERDICT -->
-  <section class="verdict hidden" id="verdict">
-    <div class="verdict-label" id="verdict-label"></div>
-    <div class="verdict-reason" id="verdict-reason"></div>
-  </section>
+    <section class="verdict hidden" id="verdict" aria-label="Trust verdict">
+      <span class="verdict-icon-slot" id="verdict-icon"></span>
+      <div class="verdict-body">
+        <div class="verdict-label" id="verdict-label"></div>
+        <div class="verdict-reasons" id="verdict-reasons"></div>
+      </div>
+    </section>
 
-  <!-- CATEGORY BREAKDOWN -->
-  <section class="categories">
-    <div class="category-row">
-      <span class="category-icon">🔐</span>
-      <span class="category-name">Security</span>
-      <span class="category-score" id="cat-security">--</span>
-      <span class="category-level" id="cat-security-level">--</span>
-    </div>
-    <div class="category-row">
-      <span class="category-icon">🕵️</span>
-      <span class="category-name">Privacy</span>
-      <span class="category-score" id="cat-privacy">--</span>
-      <span class="category-level" id="cat-privacy-level">--</span>
-    </div>
-    <div class="category-row">
-      <span class="category-icon">🎣</span>
-      <span class="category-name">Phishing</span>
-      <span class="category-score" id="cat-phishing">--</span>
-      <span class="category-level" id="cat-phishing-level">--</span>
-    </div>
-    <div class="category-row">
-      <span class="category-icon">🌐</span>
-      <span class="category-name">Resources</span>
-      <span class="category-score" id="cat-resources">--</span>
-      <span class="category-level" id="cat-resources-level">--</span>
-    </div>
-  </section>
+    <!-- CATEGORY BREAKDOWN -->
+    <section class="categories" aria-label="Category scores">
+      <div class="category-row">
+        <span class="category-icon" aria-hidden="true">🔐</span>
+        <span class="category-name">Security</span>
+        <div class="cat-bar" id="cat-security-meter" role="meter" aria-label="Security score" aria-valuemin="0" aria-valuemax="25"><div class="cat-bar-fill" id="cat-security-bar"></div></div>
+        <span class="category-score" id="cat-security"></span>
+        <span class="category-level" id="cat-security-level"></span>
+      </div>
+      <div class="category-row">
+        <span class="category-icon" aria-hidden="true">🕵️</span>
+        <span class="category-name">Privacy</span>
+        <div class="cat-bar" id="cat-privacy-meter" role="meter" aria-label="Privacy score" aria-valuemin="0" aria-valuemax="30"><div class="cat-bar-fill" id="cat-privacy-bar"></div></div>
+        <span class="category-score" id="cat-privacy"></span>
+        <span class="category-level" id="cat-privacy-level"></span>
+      </div>
+      <div class="category-row">
+        <span class="category-icon" aria-hidden="true">🎣</span>
+        <span class="category-name">Phishing</span>
+        <div class="cat-bar" id="cat-phishing-meter" role="meter" aria-label="Phishing score" aria-valuemin="0" aria-valuemax="25"><div class="cat-bar-fill" id="cat-phishing-bar"></div></div>
+        <span class="category-score" id="cat-phishing"></span>
+        <span class="category-level" id="cat-phishing-level"></span>
+      </div>
+      <div class="category-row">
+        <span class="category-icon" aria-hidden="true">🌐</span>
+        <span class="category-name">Resources</span>
+        <div class="cat-bar" id="cat-resources-meter" role="meter" aria-label="Resources score" aria-valuemin="0" aria-valuemax="20"><div class="cat-bar-fill" id="cat-resources-bar"></div></div>
+        <span class="category-score" id="cat-resources"></span>
+        <span class="category-level" id="cat-resources-level"></span>
+      </div>
+    </section>
 
-  <!-- KEY FINDINGS -->
-  <section class="findings">
-    <div class="findings-title">Key Findings</div>
-    <ul class="findings-list" id="findings-list">
-      <li class="finding-item neutral">
-        <span class="finding-icon">⏳</span>
-        <span class="finding-text">Analysis in progress...</span>
-      </li>
-    </ul>
-  </section>
+    <!-- KEY FINDINGS -->
+    <section class="findings" aria-label="Key findings">
+      <h2 class="findings-title">Key Findings</h2>
+      <div class="findings-scroll">
+        <ul class="findings-list" id="findings-list"></ul>
+        <p class="findings-more hidden" id="findings-more"></p>
+      </div>
+    </section>
+
+  </main>
 
   <!-- FOOTER ACTIONS -->
   <footer class="footer">
-    <button class="btn-full-report" id="btn-full-report">
+    <button class="btn btn-primary" id="btn-full-report" type="button">
       View Full Analysis
     </button>
-    <button class="btn-rescan" id="btn-rescan">
+    <button class="btn btn-secondary" id="btn-rescan" type="button">
       <svg class="btn-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
       Rescan
     </button>
