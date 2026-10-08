@@ -363,6 +363,13 @@ body.is-limited .verdict.multi .verdict-reason {
   scrollbar-color: var(--border) transparent;
 }
 
+/* The scroll area is keyboard-focusable in Chrome; give it the same ring as the buttons. */
+.findings-scroll:focus-visible {
+  outline: 2px solid var(--accent-hover);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 /* Breathing room under the last finding (inside the scroll area, so the list clears the footer). */
 .findings-scroll::after {
   content: '';
