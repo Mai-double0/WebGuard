@@ -51,6 +51,8 @@ function findingItem(type, icon, text) {
 // RENDER FUNCTIONS
 // =====================
 
+const CATEGORIES = ['security', 'privacy', 'phishing', 'resources'];
+
 function renderScanning() {
   setText('site-domain', 'Scanning...');
   setText('site-url', '');
@@ -58,14 +60,7 @@ function renderScanning() {
   setText('risk-label', 'Please wait');
   el('risk-badge').className = 'risk-badge';
 
-  setText('cat-security', '--');
-  setText('cat-security-level', '--');
-  setText('cat-privacy', '--');
-  setText('cat-privacy-level', '--');
-  setText('cat-phishing', '--');
-  setText('cat-phishing-level', '--');
-  setText('cat-resources', '--');
-  setText('cat-resources-level', '--');
+  resetCategories();
 
   el('findings-list').replaceChildren(findingItem('neutral', '⏳', 'Analysis in progress...'));
 
@@ -79,6 +74,7 @@ function renderError(message) {
   setText('risk-label', 'UNAVAILABLE');
   el('risk-badge').className = 'risk-badge';
 
+  resetCategories();
   el('findings-list').replaceChildren(findingItem('neutral', 'ℹ', message || 'Page could not be analyzed.'));
 
     renderVerdict(null);
@@ -115,14 +111,15 @@ function renderResult(result) {
     renderCategory('resources', categories.resources, 20);
   } else {
     // Fallback — no category breakdown yet
-    ['security', 'privacy', 'phishing', 'resources'].forEach(cat => {
-      setText(`cat-${cat}`, '--');
-      setText(`cat-${cat}-level`, '--');
-    });
+    resetCategories();
   }
 
   // Findings list
   renderFindings(findings || []);
+}
+
+function resetCategories() {
+  CATEGORIES.forEach(resetCategory);
 }
 
 function renderCategory(name, catObj, max) {
@@ -132,18 +129,31 @@ function renderCategory(name, catObj, max) {
     : catObj;
 
   if (score === undefined || score === null) {
-    setText(`cat-${name}`, '--');
-    setText(`cat-${name}-level`, '--');
+    resetCategory(name);
     return;
   }
+  const level = getCategoryLevel(score, max);
+  const pct = Math.max(0, Math.min(100, Math.round((score / max) * 100)));
+
   setText(`cat-${name}`, `${score}/${max}`);
   const levelEl = el(`cat-${name}-level`);
-  if (levelEl) {
-    const level = getCategoryLevel(score, max);
-    const label = getCategoryLabel(score, max);
-    levelEl.textContent = label;
-    levelEl.className = `category-level ${level}`;
-  }
+  levelEl.textContent = getCategoryLabel(score, max);
+  levelEl.className = `category-level ${level}`;
+
+  const bar = el(`cat-${name}-bar`);
+  bar.style.width = `${pct}%`;
+  bar.className = `cat-bar-fill ${level}`;
+  el(`cat-${name}-meter`).setAttribute('aria-valuenow', String(score));
+}
+
+function resetCategory(name) {
+  setText(`cat-${name}`, '--');
+  setText(`cat-${name}-level`, '--');
+  el(`cat-${name}-level`).className = 'category-level';
+  const bar = el(`cat-${name}-bar`);
+  bar.style.width = '0%';
+  bar.className = 'cat-bar-fill';
+  el(`cat-${name}-meter`).removeAttribute('aria-valuenow');
 }
 function renderVerdict(verdict) {
   const box = el('verdict');

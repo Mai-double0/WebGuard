@@ -282,11 +282,12 @@ body.is-limited .verdict.multi .verdict-reason {
 }
 
 .category-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 20px 66px 1fr 40px 66px;
   align-items: center;
-  padding: 7px 0;
+  column-gap: 8px;
+  padding: 6px 0;
   border-bottom: 1px solid var(--raised);
-  gap: 8px;
 }
 
 .category-row:last-child {
@@ -295,35 +296,54 @@ body.is-limited .verdict.multi .verdict-reason {
 
 .category-icon {
   font-size: 14px;
-  width: 20px;
   text-align: center;
 }
 
 .category-name {
-  flex: 1;
   font-size: 13px;
   color: var(--text);
 }
 
 .category-score {
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
   color: var(--muted);
-  width: 40px;
   text-align: right;
 }
 
 .category-level {
   font-size: 11px;
-  font-weight: 600;
-  width: 60px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
   text-align: right;
   text-transform: uppercase;
+  color: var(--muted);
 }
 
 .category-level.very-low, .category-level.low { color: var(--green-fg); }
 .category-level.moderate  { color: var(--yellow-fg); }
 .category-level.high      { color: var(--orange-fg); }
 .category-level.critical  { color: var(--red-fg); }
+
+/* Progress bar: same look as the dashboard cards, with a thicker track. */
+.cat-bar {
+  height: 6px;
+  background: var(--raised);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.cat-bar-fill {
+  width: 0;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--green);
+  transition: width 0.4s ease;
+}
+
+.cat-bar-fill.moderate { background: var(--yellow); }
+.cat-bar-fill.high     { background: var(--orange); }
+.cat-bar-fill.critical { background: var(--red); }
 
 /* --- FINDINGS --- */
 .findings-title {

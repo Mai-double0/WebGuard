@@ -52,32 +52,36 @@
     </section>
 
   <!-- CATEGORY BREAKDOWN -->
-  <section class="categories">
-    <div class="category-row">
-      <span class="category-icon">🔐</span>
-      <span class="category-name">Security</span>
-      <span class="category-score" id="cat-security">--</span>
-      <span class="category-level" id="cat-security-level">--</span>
-    </div>
-    <div class="category-row">
-      <span class="category-icon">🕵️</span>
-      <span class="category-name">Privacy</span>
-      <span class="category-score" id="cat-privacy">--</span>
-      <span class="category-level" id="cat-privacy-level">--</span>
-    </div>
-    <div class="category-row">
-      <span class="category-icon">🎣</span>
-      <span class="category-name">Phishing</span>
-      <span class="category-score" id="cat-phishing">--</span>
-      <span class="category-level" id="cat-phishing-level">--</span>
-    </div>
-    <div class="category-row">
-      <span class="category-icon">🌐</span>
-      <span class="category-name">Resources</span>
-      <span class="category-score" id="cat-resources">--</span>
-      <span class="category-level" id="cat-resources-level">--</span>
-    </div>
-  </section>
+    <section class="categories" aria-label="Category scores">
+      <div class="category-row">
+        <span class="category-icon" aria-hidden="true">🔐</span>
+        <span class="category-name">Security</span>
+        <div class="cat-bar" id="cat-security-meter" role="meter" aria-label="Security score" aria-valuemin="0" aria-valuemax="25"><div class="cat-bar-fill" id="cat-security-bar"></div></div>
+        <span class="category-score" id="cat-security"></span>
+        <span class="category-level" id="cat-security-level"></span>
+      </div>
+      <div class="category-row">
+        <span class="category-icon" aria-hidden="true">🕵️</span>
+        <span class="category-name">Privacy</span>
+        <div class="cat-bar" id="cat-privacy-meter" role="meter" aria-label="Privacy score" aria-valuemin="0" aria-valuemax="30"><div class="cat-bar-fill" id="cat-privacy-bar"></div></div>
+        <span class="category-score" id="cat-privacy"></span>
+        <span class="category-level" id="cat-privacy-level"></span>
+      </div>
+      <div class="category-row">
+        <span class="category-icon" aria-hidden="true">🎣</span>
+        <span class="category-name">Phishing</span>
+        <div class="cat-bar" id="cat-phishing-meter" role="meter" aria-label="Phishing score" aria-valuemin="0" aria-valuemax="25"><div class="cat-bar-fill" id="cat-phishing-bar"></div></div>
+        <span class="category-score" id="cat-phishing"></span>
+        <span class="category-level" id="cat-phishing-level"></span>
+      </div>
+      <div class="category-row">
+        <span class="category-icon" aria-hidden="true">🌐</span>
+        <span class="category-name">Resources</span>
+        <div class="cat-bar" id="cat-resources-meter" role="meter" aria-label="Resources score" aria-valuemin="0" aria-valuemax="20"><div class="cat-bar-fill" id="cat-resources-bar"></div></div>
+        <span class="category-score" id="cat-resources"></span>
+        <span class="category-level" id="cat-resources-level"></span>
+      </div>
+    </section>
 
   <!-- KEY FINDINGS -->
     <section class="findings" aria-label="Key findings">
