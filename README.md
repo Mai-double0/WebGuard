@@ -203,7 +203,7 @@ webguard/
 │   └── storage.js              # Local scan-history module (not yet wired in)
 ├── utils/
 │   └── helpers.js              # Shared risk-level, colour, URL, and DOM helpers
-└── icons/                      # Icon PNGs, plus generate-icons.js (dev-only: needs the `canvas` package, and must be a .cjs file to run under the root package.json)
+└── icons/                      # Icon PNGs, plus generate-icons.cjs (dev-only script that redraws them; needs the `canvas` package)
 ```
 
 ---
