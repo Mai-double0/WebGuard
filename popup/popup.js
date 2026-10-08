@@ -41,11 +41,24 @@ function svgIcon(className, nodes) {
   return svg;
 }
 
-function findingItem(type, icon, text) {
-  const li = createEl('li', `finding-item ${type}`);
-  li.append(createEl('span', 'finding-icon', icon), createEl('span', 'finding-text', text));
+const FINDING_ICONS = {
+  positive: [['circle', { cx: 12, cy: 12, r: 9 }], ['path', { d: 'm8 12 3 3 5-6' }]],
+  warning:  [['path', { d: 'M12 3.5 2.8 19.5h18.4z' }], ['path', { d: 'M12 10v4' }], ['path', { d: 'M12 17h.01' }]],
+  danger:   [['circle', { cx: 12, cy: 12, r: 9 }], ['path', { d: 'm9.2 9.2 5.6 5.6M14.8 9.2l-5.6 5.6' }]],
+  neutral:  [['circle', { cx: 12, cy: 12, r: 9 }], ['path', { d: 'M12 11v5' }], ['path', { d: 'M12 8h.01' }]]
+};
+
+function findingItem(type, text) {
+  const kind = FINDING_ICONS[type] ? type : 'neutral';
+  const li = createEl('li', `finding-item ${kind}`);
+  const label = createEl('span', 'finding-text', text);
+  label.title = text;
+  li.append(svgIcon('finding-icon', FINDING_ICONS[kind]), label);
   return li;
 }
+
+// Findings shown in the popup; the rest are in the full analysis.
+const MAX_FINDINGS = 4;
 
 // =====================
 // RENDER FUNCTIONS
@@ -62,9 +75,10 @@ function renderScanning() {
 
   resetCategories();
 
-  el('findings-list').replaceChildren(findingItem('neutral', '⏳', 'Analysis in progress...'));
+  el('findings-list').replaceChildren(findingItem('neutral', 'Analysis in progress...'));
 
     renderVerdict(null);
+  el('findings-more').classList.add('hidden');
 }
 
 function renderError(message) {
@@ -75,7 +89,8 @@ function renderError(message) {
   el('risk-badge').className = 'risk-badge';
 
   resetCategories();
-  el('findings-list').replaceChildren(findingItem('neutral', 'ℹ', message || 'Page could not be analyzed.'));
+  el('findings-list').replaceChildren(findingItem('neutral', message || 'Page could not be analyzed.'));
+  el('findings-more').classList.add('hidden');
 
     renderVerdict(null);
 }
@@ -180,14 +195,20 @@ function renderVerdict(verdict) {
 
 function renderFindings(findings) {
   const list = el('findings-list');
+  const more = el('findings-more');
   if (!findings.length) {
-    list.replaceChildren(findingItem('neutral', 'ℹ', 'No significant findings.'));
+    list.replaceChildren(findingItem('neutral', 'No significant findings.'));
+    more.classList.add('hidden');
     return;
   }
 
-  // Show max 6 findings in popup (full list in dashboard)
-  list.replaceChildren(...findings.slice(0, 6).map(f =>
-    findingItem(f.type || 'neutral', f.icon || 'ℹ', f.text || '')));
+  // Show a handful in the popup; the full list is in the dashboard.
+  list.replaceChildren(...findings.slice(0, MAX_FINDINGS).map(f =>
+    findingItem(f.type || 'neutral', f.text || '')));
+
+  const hidden = findings.length - MAX_FINDINGS;
+  more.classList.toggle('hidden', hidden <= 0);
+  if (hidden > 0) more.textContent = `+${hidden} more in full analysis`;
 }
 
 // =====================
